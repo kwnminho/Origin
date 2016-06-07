@@ -1,0 +1,222 @@
+# !/usr/bin/env python
+
+
+import sys
+import os
+print os.getcwd()
+print sys.argv[0]
+fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
+fullVarPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/var")
+print fullLibPath
+sys.path.append(fullLibPath)
+
+import origin
+if len(sys.argv) > 1:
+  configBundle = sys.argv[1]
+  origin.configure(configBundle)
+else:
+  origin.configure("site")
+
+import argparse
+import time
+import sys
+import logging
+
+import zmq
+from zmq.eventloop import ioloop
+from zmq.eventloop.zmqstream import ZMQStream
+
+from origin.server import mysql_destination
+
+
+import json
+
+"""
+..module::MonServer
+  :synopsis: Module encapsulating the Server var
+
+..moduleauthor:: Ian Wisher <ianwisher@gmail.com> & John Pretz <john.pretz@gmail.com> for the HAWC Collaberation
+
+The :mon:`origin.server.monserver` Module
+===============================================================================
+
+This module provides the MonServer class that holds all the basic methods for 
+running the monitorig server. 
+
+ZMQ IOLoop draws heavily from:
+http://learning-0mq-with-pyzmq.readthedocs.org/en/latest/pyzmq/multisocket/tornadoeventloop.html
+
+"""
+
+class MonServer(object):
+  def __init__(self,logger):
+    self.logger = logger
+    self.streamfile = ""
+    self.state = "UNKNOWN"
+    self._strlist = {}
+    self.dest = mysql_destination(logger)
+    
+  def processSingleDataMsg(self,msg):
+    messageDecoded = None
+    stream = None
+
+    result = None
+    resultText = None
+    fail = False
+    try:
+      messageDecoded = json.loads(msg)
+      stream = messageDecoded[0]
+    except:
+      result = 1
+      resultText = "Failed to decode message from client"
+      fail = True
+
+    if not fail:
+      if len(messageDecoded) != 3:
+        result = 1
+        resultText = "Measurement message didn't have all the required fields"
+      elif type(messageDecoded[1]) != int:
+        result = 1
+        resultText = "Non-integer time sent"
+
+      else:
+        recordTime = messageDecoded[1]
+        measurements = messageDecoded[2]
+          
+        result,resultText = self.dest.measurement(recordTime,stream,measurements)
+    if result != 0:
+      self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))
+    
+  def processDataMsg(self,msg):
+    for m in msg:
+      self.processSingleDataMsg(m)
+      
+  def registerStream(self,reg_stream,msg):
+    for m in msg:
+      self.registerSingleStream(reg_stream,m)
+
+  def registerSingleStream(self,reg_stream,msg):
+    verb = None
+    messageDecoded = None
+    stream = None
+
+    result = None
+    resultText = None
+    fail = False
+    try:
+      messageDecoded = json.loads(msg)
+      stream = messageDecoded[0]
+    except:
+      result = 1
+      resultText = "Failed to decode message from client"
+      fail = True
+    if not fail:
+      self.logger.info("Received registration of stream %s"%(stream))
+      result,resultText = self.dest.registerStream(stream,messageDecoded[1])
+
+    if result!=0:
+      self.logger.warn("Unable to register stream. Got msg that is badly formatted: %s"%(msg))
+                       
+    returnMessage = [result,resultText]
+
+    reg_stream.send(json.dumps(returnMessage))
+
+  def processAlertMsg(self,alert_stream,msg):
+    #Placeholder for testing alert messages 
+    try:
+      messageDecoded = json.loads(msg)
+    except:
+      result = 1
+      resultText = "Failed to decode alert"
+      fail = True
+    if not fail:
+      self.logger.info("Received alert message")
+      
+    returnMessage = [result,resultText]
+    alert_stream.send(json.dumps(returnMessage))
+
+  def CheckAlerts(self): 
+    # Do Something to sim checking 
+    # Will drop in full alert chain after testing
+    list = range(200)
+    for l in list:
+      d = l*l
+       
+def main():
+  if not os.path.exists(fullVarPath):
+    os.mkdir(fullVarPath)
+
+  #  parser = argparse.ArgumentParser(description='Lightweight Monitoring Server for HAWC')
+  
+  # parser.add_argument('-c','--config', type=str, default="site", 
+  #                     help='configuration bundle (site,test)')
+  # parser.add_argument('-l', '--logfile', type=str, default="%s/ATHENA.log"%(fullVarPath),
+  #                  help='LogFile location')
+  # parser.add_argument('-L', '--loglevel', type=str, default="DEBUG",
+  #                  help='Logging verbosity: DEBUG, INFO, WARNING, ERROR, CRITICAL')
+  # parser.add_argument('-V', '--verbosity', type=str, default="DEBUG",
+  #                  help='Console verbosity: DEBUG, INFO, WARNING, ERROR, CRITICAL')
+
+  # args = parser.parse_args()
+  
+  logger = logging.getLogger('Monitor')
+  logger.setLevel(logging.DEBUG)
+
+  # Add Console logger 
+  cLog = logging.StreamHandler()
+  cLog.setLevel("DEBUG")
+  formatter = logging.Formatter('%(levelname)s - %(message)s')
+  cLog.setFormatter(formatter)
+  logger.addHandler(cLog)
+
+  # Add File logger
+  fLog = logging.FileHandler("%s/ATHENA.log"%(fullVarPath))
+  fLog.setLevel("DEBUG")
+  formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+  fLog.setFormatter(formatter)
+  logger.addHandler(fLog)  
+  logger.info("Successfully Started Logging")
+
+  # Setup Server
+  mon = MonServer(logger)
+  
+  reg_addr = "tcp://*"
+  data_addr = "tcp://*"
+  alert_addr = "tcp://*"
+  reg_port = origin.config["origin_register_port"]
+  data_port = origin.config["origin_measure_port"]
+  alert_port = origin.config["origin_alert_port"]
+  update_period = int(float(origin.config["alert_check_period"])*1e3)
+
+  context = zmq.Context.instance()
+  reg_socket = context.socket(zmq.REP)
+  reg_socket.bind("%s:%s" % (reg_addr,reg_port))
+
+  data_socket = context.socket(zmq.PULL)
+  data_socket.bind("%s:%s" % (data_addr,data_port))
+
+  alert_socket = context.socket(zmq.REP)
+  alert_socket.bind("%s:%s" % (alert_addr,alert_port))
+
+  reg_stream = ZMQStream(reg_socket)
+  reg_stream.on_recv_stream(mon.registerStream)
+
+  data_stream = ZMQStream(data_socket)
+  data_stream.on_recv(mon.processDataMsg)
+
+  alert_stream = ZMQStream(alert_socket)
+  alert_stream.on_recv(mon.processAlertMsg)
+
+  #Periodic check for monitoring alerts
+  alerter = ioloop.PeriodicCallback(mon.CheckAlerts, update_period)
+  alerter.start()
+
+  logger.info("IOLoop Configured")
+
+  # Start the event loop 
+  ioloop.IOLoop.instance().start()
+
+if __name__ == "__main__":
+  main()
+

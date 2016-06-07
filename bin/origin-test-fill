@@ -1,0 +1,87 @@
+#!/usr/bin/env python
+
+import sys
+import os
+fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
+sys.path.append(fullLibPath)
+import time
+
+import random
+import calendar
+import time
+import sys
+
+from origin.client import float_field
+from origin.client import integer_field
+from origin.client import string_field
+from origin.client import monitoring_record
+from origin.client import server
+from origin.client import server_connection
+from origin.client import current_time
+
+# just a proxy for actually doing something useful
+def makeTempMeasurement():
+    return random.random()
+
+# something that represents the connection to the server
+# might need arguments.... idk
+serv = server()
+
+# empty stream 'cause it could happen
+connection = serv.registerStream(
+    stream="test",
+    records={
+        "test1":float_field,
+        })
+
+time.sleep(5)
+
+# alert the server that we are going to be sending this type of data
+connection = serv.registerStream(
+    stream="test",
+    records={
+        "test1":float_field,
+        "test2":float_field,
+        "test3":string_field,
+        })
+
+time.sleep(5)
+
+for i in range(0,100):
+    print "sending...."
+    connection.send(recordTime=current_time(),test1=makeTempMeasurement(),test2=makeTempMeasurement(),test3="foobar")
+    time.sleep(0.1)
+
+
+connection2 = serv.registerStream(
+    stream="test",
+    records={
+        "test1":float_field,
+        "test2":float_field,
+        })
+
+time.sleep(5)
+
+for i in range(0,100):
+    print "sending...."
+    connection2.send(recordTime=current_time(),test1=makeTempMeasurement(),test2=makeTempMeasurement())
+    time.sleep(0.1)
+
+# alert the server that we are going to be sending this type of data
+connection = serv.registerStream(
+    stream="test",
+    records={
+        "test1":float_field,
+        "test2":float_field,
+        "test3":string_field,
+        "test4":integer_field,
+        })
+
+time.sleep(5)
+
+for i in range(0,100):
+    print "sending...."
+    connection.send(recordTime=current_time(),test1=makeTempMeasurement(),test2=makeTempMeasurement(),test3="foobar",test4=505)
+    time.sleep(0.1)
+
