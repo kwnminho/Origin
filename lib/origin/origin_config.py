@@ -1,18 +1,33 @@
-
 # This file is not for committing. Don't commit it 'cause it has
 # passwords in it
-config={
-  "athena_server":"127.0.0.1",
-  "athena_register_port":"5556",
-  "athena_measure_port":"5557", 
-  "athena_alert_port":"5558",
+configTest={
+  "origin_server":"127.0.0.1",
+  "origin_register_port":"5556",
+  "origin_measure_port":"5557", 
+  "origin_alert_port":"5558",
   "alert_check_period":"30",
   "mysql_local_server":"127.0.0.1",
-  "mysql_local_db":"athena",
-  "mysql_local_user":"hawc",
-  "mysql_local_password":"orizaba!",
-  "mysql_remote_server":"hawcmon.umd.edu",
-  "mysql_remote_db":"athena",
-  "mysql_remote_user":"hawc_insert",
-  "mysql_remote_password":"XXXXXXX",
+  "mysql_local_db":"origintest",
+  "mysql_local_user":"test",
+  "mysql_local_password":"test",
+  #"mysql_remote_server":"",
+  #"mysql_remote_db":"",
+  #"mysql_remote_user":"",
+  #"mysql_remote_password":"",
+}
+
+configSite={
+  "origin_server":"xxx.xxx.xxx.xxx",
+  "origin_register_port":"5556",
+  "origin_measure_port":"5557", 
+  "origin_alert_port":"5558",
+  "alert_check_period":"30",
+  "mysql_local_server":"127.0.0.1",
+  "mysql_local_db":"origin",
+  "mysql_local_user":"_user_",
+  "mysql_local_password":"_password_",
+  #"mysql_remote_server":"",
+  #"mysql_remote_db":"",
+  #"mysql_remote_user":"",
+  #"mysql_remote_password":"",
 }

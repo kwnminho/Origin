@@ -1,5 +1,4 @@
-
-import athena_config
+import origin_config
 import sys
 
 config = None
@@ -7,16 +6,12 @@ config = None
 def configure(bundle):
     global config
     if bundle=="site":
-        config = athena_config.configSite
+        config = origin_config.configSite
     if bundle=="test":
-        config = athena_config.configTest
+        config = origin_config.configTest
     if bundle=="mon":
-        config = athena_config.configMon
+        config = origin_config.configMon
 
     if config == None:
         print "Unknown configuration .... ", bundle
         sys.exit(1)
-
-
-
-

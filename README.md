@@ -37,7 +37,7 @@ mysql -u root -p
 ```sql
 CREATE DATABASE origintest;
 CREATE USER '_user_'@'localhost' IDENTIFIED BY '_password_';
-GRANT ALL PRIVILEGES ON origintest to '_user_'@'localhost';
+GRANT ALL PRIVILEGES ON origintest.* to '_user_'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
@@ -75,10 +75,10 @@ configTest={
 
 ### Run the server
 
-You should now be able to run the server.
+You should now be able to run the server using the test configuration.
 
 ```bash
-./bin/origin-server
+./bin/origin-server test
 ```
 
 Monitor the logs in another terminal session.
@@ -88,13 +88,16 @@ tail -f var/ORIGIN.log
 
 And run the toy inserter.
 ```bash
-./bin/origin-toy-client
+./bin/origin-toy-client test
 ```
 
 The logs should show a new table added to the database.
 
 ```bash
-show output
+2016-06-07 13:59:26,281 - Monitor - INFO - Successfully Started Logging
+2016-06-07 13:59:26,286 - Monitor - INFO - IOLoop Configured
+2016-06-07 14:01:22,354 - Monitor - INFO - Received registration of stream toy
+2016-06-07 14:01:22,355 - Monitor - INFO - Attempt to register stream toy
 ```
 
 You can check that the data was actually inserted.
@@ -105,9 +108,38 @@ mysql -u _user_ -p
 
 ```sql
 USE origintest;
-SELECT * FROM measurements_test;
+SELECT * FROM measurements_toy;
 ```
 
 ```bash
-show output
++----+-----------------+-----------+-----------+
+| id | measurementTime | toy1      | toy2      |
++----+-----------------+-----------+-----------+
+|  1 |      1465326087 |   0.88671 |  0.980564 |
+|  2 |      1465326092 |  0.624428 |  0.228306 |
+|  3 |      1465326097 |   0.77994 |  0.616023 |
+|  4 |      1465326102 |  0.122097 |  0.148885 |
+|  5 |      1465326107 |  0.781741 |  0.851939 |
+|  6 |      1465326112 | 0.0570459 |  0.891965 |
+|  7 |      1465326117 |  0.197933 |  0.736311 |
+|  8 |      1465326122 |  0.515716 | 0.0314361 |
+|  9 |      1465326127 |  0.669868 |  0.737255 |
+| 10 |      1465326132 |  0.445365 |  0.298424 |
+| 11 |      1465326137 |  0.938865 |  0.320306 |
+| 12 |      1465326142 |   0.38073 |  0.745032 |
+| 13 |      1465326147 |  0.872034 |  0.987444 |
++----+-----------------+-----------+-----------+
+13 rows in set (0.00 sec)
+```
+
+Once the coniguration object `configSite` is edited, logging from an external source can be start.
+To do so just run on the server:
+
+```bash
+./bin/origin-server
+```
+
+and the monitoring device:
+```bash
+./bin/origin-toy-client
 ```
