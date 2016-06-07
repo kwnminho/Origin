@@ -1,3 +1,5 @@
+# ![](bloop.svg =100px)
+
 # Origin
 
 Origin is a simple monitoring and alert server, based on ZeroMQ and JSON messaging, making it extremely portable and easy to use.
