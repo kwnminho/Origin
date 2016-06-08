@@ -90,7 +90,8 @@ class MonServer(object):
     
   def processDataMsg(self,msg):
     for m in msg:
-      self.processSingleDataMsg(m)
+      if m != '':
+        self.processSingleDataMsg(m)
       
   def registerStream(self,reg_stream,msg):
     for m in msg:
