@@ -6,6 +6,8 @@ from origin.server import measurement_validation
 
 from origin import config
 
+import struct
+
 class mysql_destination:
     def readStreamdefTable(self):
         streamCreation = (
@@ -43,7 +45,7 @@ class mysql_destination:
             cursor.execute(query)
             definition = {}
             for field_name,field_type,keyIndex in cursor:
-                definition[field_name] = (field_type, keyIndex)
+                definition[field_name] = {"type":field_type, "keyIndex":keyIndex}
             currentStreamNameDefinitions[name] = definition
             currentStreamVersions[name] = version
             
@@ -176,7 +178,27 @@ class mysql_destination:
     def measurementOrdered(self,measurementTime,stream,measurements):
         meas = {}
         for key in self.knownStreams[stream]:
-          idx = self.knownStreams[stream][key][1]
+          idx = self.knownStreams[stream][key]["keyIndex"]
           meas[key] = measurements[idx]
 
         return self.measurement(measurementTime,stream,meas)
+
+    def measurementBinary(self,stream,measurements):
+        if stream not in self.knownStreams.keys():
+          print "trying to add a measurement to data on an unknown stream"
+          return (1,"Unknown stream")
+
+        formatStr = '!i' # assumes 32b timestamp
+        for key in self.knownStreams[stream]:
+          dtype = self.knownStreams[stream][key]["type"]
+          if  dtype == 'int':
+            formatStr += 'i'
+          elif dtype == 'float':
+            formatStr += 'f'
+          else:
+            return (1,"Unsupported type '{}' in binary data".format(dtype))
+
+        dtuple = struct.unpack_from(formatStr, measurements)
+        measurementTime = dtuple[0]
+        meas = list(dtuple[1:])
+        return self.measurementOrdered(measurementTime,stream,meas)

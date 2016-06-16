@@ -35,6 +35,9 @@ from origin.client import current_time
 def makeTempMeasurement():
     return random.randint(0,(2**31)-1) # int32
 
+def makeTempMeasurementFloat():
+    return random.random()
+
 # something that represents the connection to the server
 # might need arguments.... idk
 serv = server()
@@ -46,7 +49,7 @@ connection = serv.registerStream(
     stream=streamName,
     records={
         "toy1":integer_field,
-        "toy2":integer_field,
+        "toy2":float_field,
         })
 
 numEntries = 2
@@ -68,11 +71,8 @@ time.sleep(2)
 while True:
     print "sending...."
     #connection.send(recordTime=current_time(),toy1=makeTempMeasurement(),toy2=makeTempMeasurement())
-    data = [current_time()]
-    for i in range(1+numEntries):
-        if i > 0:
-            data.append(makeTempMeasurement())
-        struct.pack_into( "!i", msg, len(header) + 4*i, data[i] ) # format string says network order int (size 4)
+    data = [current_time(), makeTempMeasurement(), makeTempMeasurementFloat()]
+    struct.pack_into( "!iif", msg, len(header), *data ) # format string says network order int (size 4)
     print( ", ".join(map(str, data)) )
     print list(msg)
     connection.socket.send(msg)

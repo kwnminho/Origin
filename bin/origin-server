@@ -31,7 +31,6 @@ from origin.server import mysql_destination
 
 
 import json
-import struct
 
 """
 ..module::MonServer
@@ -65,7 +64,8 @@ class MonServer(object):
     result = None
     resultText = None
     fail = False
-    inserter = self.dest.measurement
+
+    binaryData = False
     try:
       try: 
         messageDecoded = json.loads(msg)
@@ -76,14 +76,7 @@ class MonServer(object):
           header, data = msg.split(']', 1) # TODO: this will fail if the json contains any sub-lists
           header += ']'
           stream = json.loads(header)[0]
-          if len(data) % 4 == 0:
-            dtuple = struct.unpack_from("!{}i".format(len(data)/4), data)
-          else:
-            raise ValueError
-          recordTime = dtuple[0]
-          # need to get the columns from the stream name
-          messageDecoded = [stream, recordTime, dtuple[1:]]
-          inserter = self.dest.measurementOrdered
+          binaryData = True
             
         else:
           raise ValueError
@@ -94,18 +87,22 @@ class MonServer(object):
       fail = True
 
     if not fail:
-      if len(messageDecoded) != 3:
-        result = 1
-        resultText = "Measurement message didn't have all the required fields"
-      elif type(messageDecoded[1]) != int:
-        result = 1
-        resultText = "Non-integer time sent"
+      if binaryData:
+        result, resultText = self.dest.measurementBinary(stream,data)
 
       else:
-        recordTime = messageDecoded[1]
-        measurements = messageDecoded[2]
-          
-        result,resultText = inserter(recordTime,stream,measurements)
+        if len(messageDecoded) != 3:
+          result = 1
+          resultText = "Measurement message didn't have all the required fields"
+        elif type(messageDecoded[1]) != int:
+          result = 1
+          resultText = "Non-integer time sent"
+
+        else:
+          recordTime = messageDecoded[1]
+          measurements = messageDecoded[2]
+          result,resultText = self.dest.measurement(recordTime,stream,measurements)
+
     if result != 0:
       self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))
     

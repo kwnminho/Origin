@@ -5,7 +5,7 @@ def template_validation(templateDest,templateReference):
     return False
   try: 
     for key in templateDest:
-      if templateDest[key] != templateReference[key][0]:
+      if templateDest[key] != templateReference[key]["type"]:
         return False
   except:
     return False
