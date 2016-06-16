@@ -103,7 +103,14 @@ class mysql_destination:
                         VALUES ("%s","%s",%d,"%s",%d)"""%(stream,fieldName,destVersion,template[fieldName],idx)
                 cursor.execute(query)
 
-            query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,measurementTime integer,"%(stream,destVersion)
+            query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,measurementTime "%(stream,destVersion)
+            if "timestamp_type" in config:
+                if config["timestamp_type"] == "uint64":
+                    query += "BIGINT UNSIGNED"
+            else:
+                query += "INT UNSIGNED"
+            query += ","
+
             fields = []
             for fieldName in template.keys():
                 fieldType = template[fieldName]
@@ -188,7 +195,13 @@ class mysql_destination:
           print "trying to add a measurement to data on an unknown stream"
           return (1,"Unknown stream")
 
-        formatStr = '!i' # assumes 32b timestamp
+        formatStr = '!' # use network byte order
+        if "timestamp_type" in config:
+          if config["timestamp_type"] == "uint64":
+            formatStr += 'Q' # unsigned long long
+        else:
+          formatStr += 'i' # unsigned long long
+
         for key in self.knownStreams[stream]:
           dtype = self.knownStreams[stream][key]["type"]
           if  dtype == 'int':

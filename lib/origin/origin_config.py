@@ -14,6 +14,7 @@ configTest={
   #"mysql_remote_db":"",
   #"mysql_remote_user":"",
   #"mysql_remote_password":"",
+  "timestamp_type":"uint64",
 }
 
 configSite={
@@ -30,4 +31,5 @@ configSite={
   #"mysql_remote_db":"",
   #"mysql_remote_user":"",
   #"mysql_remote_password":"",
+  "timestamp_type":"uint64",
 }

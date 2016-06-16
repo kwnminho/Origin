@@ -60,7 +60,17 @@ numEntries = 2
 
 header = json.dumps((streamName,))
 print header
-msg = ctypes.create_string_buffer(header, len(header)+(numEntries+1)*4 ) # ints are 4 bytes
+fstr = "!" # network byte order
+if "timestamp_type" in origin.config:
+    if origin.config["timestamp_type"] == "uint64":
+        print("using 64b timestamps")
+        tsSize = 8
+        fstr += "Q" # unsigned long long
+else:
+    tsSize = 4
+    fstr += "I" # unsigned long
+
+msg = ctypes.create_string_buffer(header, len(header)+ tsSize +(numEntries)*4 ) # ints are 4 bytes
 
 print list(msg)
 
@@ -72,7 +82,7 @@ while True:
     print "sending...."
     #connection.send(recordTime=current_time(),toy1=makeTempMeasurement(),toy2=makeTempMeasurement())
     data = [current_time(), makeTempMeasurement(), makeTempMeasurementFloat()]
-    struct.pack_into( "!iif", msg, len(header), *data ) # format string says network order int (size 4)
+    struct.pack_into( fstr+"if", msg, len(header), *data ) # format string says network order int (size 4)
     print( ", ".join(map(str, data)) )
     print list(msg)
     connection.socket.send(msg)
