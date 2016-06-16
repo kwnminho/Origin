@@ -21,7 +21,8 @@ class mysql_destination:
             " stream_name varchar(1024), "
             " field_name varchar(1024), "
             " version integer, "
-            " field_type varchar(100) "
+            " field_type varchar(100), "
+            " keyIndex integer"
             " )"
         )
 
@@ -38,11 +39,11 @@ class mysql_destination:
         currentStreamNameDefinitions = {}
         currentStreamVersions = {}
         for name,version in currentStreamNamesVersions:
-            query = "SELECT field_name,field_type FROM origin_stream_fields WHERE stream_name=\"%s\" and version=%d"%(name,version)
+            query = "SELECT field_name,field_type,keyIndex FROM origin_stream_fields WHERE stream_name=\"%s\" and version=%d"%(name,version)
             cursor.execute(query)
             definition = {}
-            for field_name,field_type in cursor:
-                definition[field_name] = field_type
+            for field_name,field_type,keyIndex in cursor:
+                definition[field_name] = (field_type, keyIndex)
             currentStreamNameDefinitions[name] = definition
             currentStreamVersions[name] = version
             
@@ -63,7 +64,7 @@ class mysql_destination:
 
         self.readStreamdefTable()
 
-    def registerStream(self,stream,template):
+    def registerStream(self,stream,template,keyOrder=None):
         updateDatabase = False
         destVersion = None
         self.logger.info("Attempt to register stream %s"%(stream))
@@ -88,9 +89,18 @@ class mysql_destination:
             print cursor.execute(query)
 
             for fieldName in template.keys():
-                query = "INSERT INTO origin_stream_fields VALUES (\"%s\",\"%s\",%d,\"%s\");"%(stream,fieldName,destVersion,template[fieldName])
-
+                idx = None
+                try:
+                  for i, k in enumerate(keyOrder):
+                    if k == fieldName:
+                      idx = i
+                      break
+                except TypeError:
+                  pass
+                query = """INSERT INTO origin_stream_fields 
+                        VALUES ("%s","%s",%d,"%s",%d)"""%(stream,fieldName,destVersion,template[fieldName],idx)
                 cursor.execute(query)
+
             query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,measurementTime integer,"%(stream,destVersion)
             fields = []
             for fieldName in template.keys():
@@ -163,6 +173,10 @@ class mysql_destination:
         resultText = ""
         return (result,resultText)
 
+    def measurementOrdered(self,measurementTime,stream,measurements):
+        meas = {}
+        for key in self.knownStreams[stream]:
+          idx = self.knownStreams[stream][key][1]
+          meas[key] = measurements[idx]
 
-            
-        
+        return self.measurement(measurementTime,stream,meas)

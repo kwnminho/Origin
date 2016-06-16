@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+
+import sys
+import os
+fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
+sys.path.append(fullLibPath)
+import time
+
+import random
+import calendar
+import time
+import sys
+import ctypes
+import struct
+import json # temp
+
+import origin
+if len(sys.argv) > 1:
+  configBundle = sys.argv[1]
+  origin.configure(configBundle)
+else:
+  origin.configure("site")
+
+
+from origin.client import float_field
+from origin.client import integer_field
+from origin.client import string_field
+from origin.client import monitoring_record
+from origin.client import server
+from origin.client import server_connection
+from origin.client import current_time
+
+# just a proxy for actually doing something useful
+def makeTempMeasurement():
+    return random.randint(0,(2**31)-1) # int32
+
+# something that represents the connection to the server
+# might need arguments.... idk
+serv = server()
+
+streamName = "toy_bin"
+
+# alert the server that we are going to be sending this type of data
+connection = serv.registerStream(
+    stream=streamName,
+    records={
+        "toy1":integer_field,
+        "toy2":integer_field,
+        })
+
+numEntries = 2
+
+# perhaps print some useful message. Perhaps try to reconnect....
+# print "problem establishing connection to server..."
+# sys.exit(1)
+
+header = json.dumps((streamName,))
+print header
+msg = ctypes.create_string_buffer(header, len(header)+(numEntries+1)*4 ) # ints are 4 bytes
+
+print list(msg)
+
+# This might need to be more complicated, but you get the gist. Keep sending records forever    
+time.sleep(2)
+
+
+while True:
+    print "sending...."
+    #connection.send(recordTime=current_time(),toy1=makeTempMeasurement(),toy2=makeTempMeasurement())
+    data = [current_time()]
+    for i in range(1+numEntries):
+        if i > 0:
+            data.append(makeTempMeasurement())
+        struct.pack_into( "!i", msg, len(header) + 4*i, data[i] ) # format string says network order int (size 4)
+    print( ", ".join(map(str, data)) )
+    print list(msg)
+    connection.socket.send(msg)
+    time.sleep(5)

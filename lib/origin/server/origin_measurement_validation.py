@@ -11,7 +11,7 @@ def measurement_validation(measurement,template):
 
     for fieldName in measurement.keys():
         fieldType = None
-        fieldTypeName = template[fieldName]
+        fieldTypeName = template[fieldName][0]
         if fieldTypeName == "float":
             fieldType = float
         elif fieldTypeName == "int":

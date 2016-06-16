@@ -31,6 +31,7 @@ from origin.server import mysql_destination
 
 
 import json
+import struct
 
 """
 ..module::MonServer
@@ -64,9 +65,29 @@ class MonServer(object):
     result = None
     resultText = None
     fail = False
+    inserter = self.dest.measurement
     try:
-      messageDecoded = json.loads(msg)
-      stream = messageDecoded[0]
+      try: 
+        messageDecoded = json.loads(msg)
+        stream = messageDecoded[0]
+      except ValueError:
+        # json failed, check for json substring
+        if msg[0] == '[':
+          header, data = msg.split(']', 1) # TODO: this will fail if the json contains any sub-lists
+          header += ']'
+          stream = json.loads(header)[0]
+          if len(data) % 4 == 0:
+            dtuple = struct.unpack_from("!{}i".format(len(data)/4), data)
+          else:
+            raise ValueError
+          recordTime = dtuple[0]
+          # need to get the columns from the stream name
+          messageDecoded = [stream, recordTime, dtuple[1:]]
+          inserter = self.dest.measurementOrdered
+            
+        else:
+          raise ValueError
+
     except:
       result = 1
       resultText = "Failed to decode message from client"
@@ -84,7 +105,7 @@ class MonServer(object):
         recordTime = messageDecoded[1]
         measurements = messageDecoded[2]
           
-        result,resultText = self.dest.measurement(recordTime,stream,measurements)
+        result,resultText = inserter(recordTime,stream,measurements)
     if result != 0:
       self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))
     
@@ -113,8 +134,18 @@ class MonServer(object):
       resultText = "Failed to decode message from client"
       fail = True
     if not fail:
+      rawKeyList = msg.split('{')[1]
+      rawKeyList = rawKeyList.split('}')[0]
+      rawKeyList = rawKeyList.split(',')
+      keyOrder = []
+      for idx, rawKey in enumerate(rawKeyList):
+        for key in messageDecoded[1]:
+            if rawKey.find('"{}"'.format(key)) != -1:
+                keyOrder.append(key)
+                break
+
       self.logger.info("Received registration of stream %s"%(stream))
-      result,resultText = self.dest.registerStream(stream,messageDecoded[1])
+      result,resultText = self.dest.registerStream(stream,messageDecoded[1],keyOrder)
 
     if result!=0:
       self.logger.warn("Unable to register stream. Got msg that is badly formatted: %s"%(msg))

@@ -1,5 +1,12 @@
 
 # should check that the values are in the list of known values
 def template_validation(templateDest,templateReference):
-    if templateDest == templateReference:
-        return True
+  if len(templateDest) != len(templateReference):
+    return False
+  try: 
+    for key in templateDest:
+      if templateDest[key] != templateReference[key][0]:
+        return False
+  except:
+    return False
+  return True
