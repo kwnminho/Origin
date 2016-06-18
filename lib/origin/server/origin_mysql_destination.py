@@ -3,6 +3,7 @@ import json
 import mysql.connector
 from origin.server import template_validation
 from origin.server import measurement_validation
+from origin.server import data_types
 
 from origin import config
 
@@ -104,29 +105,23 @@ class mysql_destination:
                 cursor.execute(query)
 
             query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,measurementTime "%(stream,destVersion)
-            if "timestamp_type" in config:
-                if config["timestamp_type"] == "uint64":
-                    query += "BIGINT UNSIGNED"
-            else:
+            try:
+                query += data_types[config["timestamp_type"]]["mysql"]
+            except KeyError:
                 query += "INT UNSIGNED"
             query += ","
 
             fields = []
             for fieldName in template.keys():
                 fieldType = template[fieldName]
-                fieldTypeSQL = None
-                if fieldType == "string":
-                    fieldTypeSQL = "TEXT"
-                if fieldType == "int":
-                    fieldTypeSQL="integer"
-                if fieldType == "float":
-                    fieldTypeSQL="float"
-                fields.append((fieldName,fieldTypeSQL))
+                try:
+                    fields.append( (fieldName,data_types[fieldType]["mysql"]) )
+                except KeyError:
+                    pass # TODO: Whatever the failure mode should be I guess
+
             for i in range(0,len(fields)):
-                query = query + "%s %s"%(fields[i][0],fields[i][1])
-                if i < len(fields) -1:
-                    query = query + ","
-            query = query + ", PRIMARY KEY (id))"
+                query = query + "%s %s,"%(fields[i][0],fields[i][1])
+            query = query + "PRIMARY KEY (id))"
 
             cursor.execute(query)
 
@@ -195,21 +190,23 @@ class mysql_destination:
           print "trying to add a measurement to data on an unknown stream"
           return (1,"Unknown stream")
 
-        formatStr = '!' # use network byte order
-        if "timestamp_type" in config:
-          if config["timestamp_type"] == "uint64":
-            formatStr += 'Q' # unsigned long long
-        else:
-          formatStr += 'i' # unsigned long long
+        formatStr = [None] * (len(self.knownStreams[stream]) + 2)
+        formatStr[0] = '!' # use network byte order
+        try:
+            formatStr[1] = data_types[config["timestamp_type"]]["format_char"]
+        except KeyError:
+            formatStr[1] = data_types["uint"]["format_char"]
 
         for key in self.knownStreams[stream]:
           dtype = self.knownStreams[stream][key]["type"]
-          if  dtype == 'int':
-            formatStr += 'i'
-          elif dtype == 'float':
-            formatStr += 'f'
-          else:
-            return (1,"Unsupported type '{}' in binary data".format(dtype))
+          idx = self.knownStreams[stream][key]["keyIndex"]
+          try:
+            formatStr[idx+2] = data_types[dtype]["format_char"]
+            if not data_types[dtype]["binary_allowed"]:
+              return (1,"Unsupported type '{}' in binary data.".format(dtype))
+          except KeyError:
+            return (1,"Type \"{}\" not recognized.".format(dtype))
+        formatStr = ''.join(formatStr)
 
         dtuple = struct.unpack_from(formatStr, measurements)
         measurementTime = dtuple[0]

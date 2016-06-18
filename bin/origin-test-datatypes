@@ -1,0 +1,109 @@
+#!/usr/bin/env python
+
+import sys
+import os
+fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
+sys.path.append(fullLibPath)
+import time
+
+import random
+import calendar
+import time
+import sys
+import ctypes
+import struct
+import json # temp
+
+import origin
+
+if len(sys.argv) > 1:
+  configBundle = sys.argv[1]
+  origin.configure(configBundle)
+else:
+  origin.configure("site")
+
+
+from origin.client import monitoring_record
+from origin.client import server
+from origin.client import server_connection
+from origin.client import current_time
+from origin.client import random_data
+from origin.client import formatStreamDeclaration
+from origin.server import data_types
+
+# something that represents the connection to the server
+# might need arguments.... idk
+serv = server()
+
+streamName = "toy_dtype_test2"
+records={
+    "toy_int":"int",
+    "toy_uint":"uint",
+    "toy_int64":"int64",
+    "toy_uint64":"uint64",
+    "toy_int16":"int16",
+    "toy_uint16":"uint16",
+    "toy_int8":"int8",
+    "toy_uint8":"uint8",
+    "toy_float":"float",
+    "toy_double":"double",
+}
+numEntries = len(records)
+
+# alert the server that we are going to be sending this type of data
+connection = serv.registerStream(
+    stream=streamName,
+    records=records
+)
+
+# since json object arent gaurenteed to preserve order we have to check what we actually are sending
+msg_out = origin.client.formatStreamDeclaration(streamName,records)
+template = json.loads(msg_out)[1]
+rawKeyList = msg_out.split('{')[1]
+rawKeyList = rawKeyList.split('}')[0]
+rawKeyList = rawKeyList.split(',')
+keyOrder = []
+for idx, rawKey in enumerate(rawKeyList):
+    for key in template:
+        if rawKey.find('"{}"'.format(key)) != -1:
+            keyOrder.append(key)
+            break
+#print keyOrder
+
+# perhaps print some useful message. Perhaps try to reconnect....
+# print "problem establishing connection to server..."
+# sys.exit(1)
+
+header = json.dumps((streamName,))
+print header
+
+try:
+    tsType = origin.config["timestamp_type"]
+except KeyError:
+    tsType = "uint"
+
+tsSize = data_types[tsType]["size"]
+fstr = "!" + data_types[tsType]["format_char"]# network byte order
+
+dataLength = len(header) + tsSize
+for entry in keyOrder:
+    dataLength += data_types[records[entry]]["size"]
+    fstr += data_types[records[entry]]["format_char"]
+#print fstr
+#print dataLength
+msg = ctypes.create_string_buffer( header, dataLength )
+
+# This might need to be more complicated, but you get the gist. Keep sending records forever    
+time.sleep(2)
+
+while True:
+    print "sending...."
+    data = [current_time()]
+    for entry in keyOrder:
+        d = random_data( records[entry] )
+        data.append(d)
+    struct.pack_into( fstr, msg, len(header), *data ) # format string says network order int (size 4)
+    print( ", ".join(map(str, data)) )
+    connection.socket.send(msg)
+    time.sleep(1)

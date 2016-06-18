@@ -3,6 +3,7 @@ from origin.client import server_connection
 from origin.client import float_field
 from origin.client import integer_field
 from origin.client import string_field
+from origin.server import data_types
 
 from origin import config
 
@@ -12,6 +13,11 @@ import sys
 import string
 
 def decode(measurementType):
+    try:
+        data_types[measurementType]
+        return measurementType
+    except:
+        pass
     if measurementType == float_field:
         return "float"
     if measurementType == integer_field:
@@ -30,7 +36,7 @@ def formatStreamDeclaration(stream,records):
             return None
         else:
             sentDict[m] = decodedType
-    return json.dumps([stream,sentDict])
+    return json.dumps([stream,sentDict], sort_keys=True) # makes the order deterministic
 
 def simpleString(input):
     invalidChars = set(string.punctuation.replace("_",""))
@@ -40,15 +46,19 @@ def simpleString(input):
         return 0
 
 def validateStreamDeclaration(stream,template):
-    validTypes = [float_field,integer_field,string_field]
     fields = template.keys()
     error = False
     for f in fields:
-        if template[f] not in validTypes:
+        try:
+            data_types[template[f]]
+        except KeyError:
+            print("type {} not recognized".format(template[f]))
             error = True
         if simpleString(f) != 0:
+            print("Invalid field name: {}".format(f))
             error = True
     if simpleString(stream) != 0:
+        print("Invalid stream name: {}".format(stream))
         error = True
     if not error:
         return 0
@@ -90,11 +100,9 @@ class server:
             print "Problem registering stream",stream
             print confirmationDecoded[1]
             return None
-        
-
+ 
         # error checking
         socket_data = context.socket(zmq.PUSH)
         msgport = config["origin_measure_port"]
         socket_data.connect("tcp://%s:%s"%(host,msgport))
         return server_connection(stream,context,socket_data)
-
