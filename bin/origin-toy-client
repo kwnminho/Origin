@@ -20,9 +20,6 @@ else:
   origin.configure("site")
 
 
-from origin.client import float_field
-from origin.client import integer_field
-from origin.client import string_field
 from origin.client import monitoring_record
 from origin.client import server
 from origin.client import server_connection
@@ -41,8 +38,8 @@ serv = server()
 connection = serv.registerStream(
     stream="toy",
     records={
-        "toy1":float_field,
-        "toy2":float_field,
+        "toy1":"float",
+        "toy2":"float",
         })
 
 # perhaps print some useful message. Perhaps try to reconnect....
@@ -55,7 +52,9 @@ time.sleep(5)
 
 while True:
     print "sending...."
-    connection.send(recordTime=current_time(),toy1=makeTempMeasurement(),toy2=makeTempMeasurement())
+    t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
+    connection.send(recordTime=current_time(),toy1=t1,toy2=t2)
+    print("toy1: {}\ntoy2: {}".format(t1,t2))
     time.sleep(5)
 
 

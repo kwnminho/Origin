@@ -16,6 +16,7 @@ import struct
 import json # temp
 
 import origin
+
 if len(sys.argv) > 1:
   configBundle = sys.argv[1]
   origin.configure(configBundle)
@@ -23,36 +24,38 @@ else:
   origin.configure("site")
 
 
-from origin.client import float_field
-from origin.client import integer_field
-from origin.client import string_field
 from origin.client import monitoring_record
 from origin.client import server
 from origin.client import server_connection
 from origin.client import current_time
-
-# just a proxy for actually doing something useful
-def makeTempMeasurement():
-    return random.randint(0,(2**31)-1) # int32
-
-def makeTempMeasurementFloat():
-    return random.random()
+from origin.client import random_data
+from origin.client import formatStreamDeclaration
+from origin.server import data_types
 
 # something that represents the connection to the server
 # might need arguments.... idk
 serv = server()
 
-streamName = "toy_bin"
+streamName = "toy_dtype_test1"
+records={
+    "toy_int":"int",
+    "toy_uint":"uint",
+    "toy_int64":"int64",
+    "toy_uint64":"uint64",
+    "toy_int16":"int16",
+    "toy_uint16":"uint16",
+    "toy_int8":"int8",
+    "toy_uint8":"uint8",
+    "toy_float":"float",
+    "toy_double":"double",
+}
+numEntries = len(records)
 
 # alert the server that we are going to be sending this type of data
 connection = serv.registerStream(
     stream=streamName,
-    records={
-        "toy1":integer_field,
-        "toy2":float_field,
-        })
-
-numEntries = 2
+    records=records
+)
 
 # perhaps print some useful message. Perhaps try to reconnect....
 # print "problem establishing connection to server..."
@@ -60,30 +63,20 @@ numEntries = 2
 
 header = json.dumps((streamName,))
 print header
-fstr = "!" # network byte order
-if "timestamp_type" in origin.config:
-    if origin.config["timestamp_type"] == "uint64":
-        print("using 64b timestamps")
-        tsSize = 8
-        fstr += "Q" # unsigned long long
-else:
-    tsSize = 4
-    fstr += "I" # unsigned long
 
-msg = ctypes.create_string_buffer(header, len(header)+ tsSize +(numEntries)*4 ) # ints are 4 bytes
-
-print list(msg)
+try:
+    tsType = origin.config["timestamp_type"]
+except KeyError:
+    tsType = "uint"
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever    
 time.sleep(2)
 
-
 while True:
     print "sending...."
-    #connection.send(recordTime=current_time(),toy1=makeTempMeasurement(),toy2=makeTempMeasurement())
-    data = [current_time(), makeTempMeasurement(), makeTempMeasurementFloat()]
-    struct.pack_into( fstr+"if", msg, len(header), *data ) # format string says network order int (size 4)
-    print( ", ".join(map(str, data)) )
-    print list(msg)
-    connection.socket.send(msg)
+    data = {"recordTime":current_time()}
+    for entry in records:
+        data[entry] = random_data( records[entry] )
+    print(data)
+    connection.send(**data)
     time.sleep(5)

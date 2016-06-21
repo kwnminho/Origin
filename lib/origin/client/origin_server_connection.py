@@ -9,7 +9,6 @@ class server_connection:
         self.socket = socket
 
     def send(self,**kwargs):
-        print kwargs
         msgMap = {}
         recordTime = None
         for k in kwargs.keys():

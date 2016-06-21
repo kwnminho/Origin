@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# tests binary formatting
 
 import sys
 import os
