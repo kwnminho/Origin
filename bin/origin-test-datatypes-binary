@@ -50,61 +50,32 @@ records={
     "toy_float":"float",
     "toy_double":"double",
 }
-numEntries = len(records)
+#keyOrder = records.keys() # if you want to be explicit
 
 # alert the server that we are going to be sending this type of data
 connection = serv.registerStream(
     stream=streamName,
-    records=records
+    records=records,
+    #keyOrder=keyOrder
 )
-
-# since json object arent gaurenteed to preserve order we have to check what we actually are sending
-msg_out = origin.client.formatStreamDeclaration(streamName,records)
-template = json.loads(msg_out)[1]
-rawKeyList = msg_out.split('{')[1]
-rawKeyList = rawKeyList.split('}')[0]
-rawKeyList = rawKeyList.split(',')
-keyOrder = []
-for idx, rawKey in enumerate(rawKeyList):
-    for key in template:
-        if rawKey.find('"{}"'.format(key)) != -1:
-            keyOrder.append(key)
-            break
-#print keyOrder
 
 # perhaps print some useful message. Perhaps try to reconnect....
 # print "problem establishing connection to server..."
 # sys.exit(1)
-
-header = json.dumps((streamName,))
-print header
 
 try:
     tsType = origin.config["timestamp_type"]
 except KeyError:
     tsType = "uint"
 
-tsSize = data_types[tsType]["size"]
-fstr = "!" + data_types[tsType]["format_char"]# network byte order
-
-dataLength = len(header) + tsSize
-for entry in keyOrder:
-    dataLength += data_types[records[entry]]["size"]
-    fstr += data_types[records[entry]]["format_char"]
-#print fstr
-#print dataLength
-msg = ctypes.create_string_buffer( header, dataLength )
-
 # This might need to be more complicated, but you get the gist. Keep sending records forever    
 time.sleep(2)
 
 while True:
     print "sending...."
-    data = [current_time()]
-    for entry in keyOrder:
-        d = random_data( records[entry] )
-        data.append(d)
-    struct.pack_into( fstr, msg, len(header), *data ) # format string says network order int (size 4)
-    print( ", ".join(map(str, data)) )
-    connection.socket.send(msg)
+    data = {"recordTime": current_time()}
+    for entry in records:
+        data[entry] = random_data( records[entry] )
+    print data
+    connection.send(**data)
     time.sleep(1)

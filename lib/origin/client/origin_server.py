@@ -26,7 +26,14 @@ def decode(measurementType):
         return "string"
     return None
 
-def formatStreamDeclaration(stream,records):
+def declarationFormater(stream,records,keyOrder):
+    decStr = [stream]
+    for key in keyOrder:
+        decStr.append(':'.join([key,records[key]]))
+    return ','.join(decStr)
+
+
+def formatStreamDeclaration(stream,records,keyOrder):
     measurements = records.keys()
     sentDict = {}
     for m in measurements:
@@ -36,7 +43,7 @@ def formatStreamDeclaration(stream,records):
             return None
         else:
             sentDict[m] = decodedType
-    return json.dumps([stream,sentDict], sort_keys=True) # makes the order deterministic
+    return declarationFormater(stream,sentDict,keyOrder)
 
 def simpleString(input):
     invalidChars = set(string.punctuation.replace("_",""))
@@ -71,7 +78,7 @@ class server:
     def ping(self):
         return True
 
-    def registerStream(self,stream,records):
+    def registerStream(self,stream,records,keyOrder=None):
         valid = validateStreamDeclaration(stream,records)
 
         if valid != 0:
@@ -85,7 +92,9 @@ class server:
         host=config["origin_server"]
         socket.connect ("tcp://%s:%s" % (host,port))
 
-        registerComm = formatStreamDeclaration(stream,records)
+        if keyOrder is None:
+            keyOrder = records.keys()
+        registerComm = formatStreamDeclaration(stream,records,keyOrder)
         
         if(registerComm == None):
             print "can't format stream into json"
@@ -105,4 +114,4 @@ class server:
         socket_data = context.socket(zmq.PUSH)
         msgport = config["origin_measure_port"]
         socket_data.connect("tcp://%s:%s"%(host,msgport))
-        return server_connection(stream,context,socket_data)
+        return server_connection(stream,keyOrder,records,context,socket_data)

@@ -123,26 +123,39 @@ class MonServer(object):
     result = None
     resultText = None
     fail = False
+    keyOrder = []
+
     try:
-      messageDecoded = json.loads(msg)
-      stream = messageDecoded[0]
+      # do a simple check for json formating first
+      if msg[0] == '[':
+        messageDecoded = json.loads(msg)
+        reocrdDict = messageDecoded[1]
+        rawKeyList = msg.split('{')[1]
+        rawKeyList = rawKeyList.split('}')[0]
+        rawKeyList = rawKeyList.split(',')
+        for idx, rawKey in enumerate(rawKeyList):
+          for key in recordDict:
+              if rawKey.find('"{}"'.format(key)) != -1:
+                  keyOrder.append(key)
+                  break
+      # otherwise try comma-separated format
+      else:
+        messageDecoded = msg.split(',')
+        recordDict = {}
+        for entry in messageDecoded[1:]:
+          key, dtype = entry.split(':')
+          recordDict[key] = dtype
+          keyOrder.append(key)
+  
     except:
       result = 1
       resultText = "Failed to decode message from client"
       fail = True
-    if not fail:
-      rawKeyList = msg.split('{')[1]
-      rawKeyList = rawKeyList.split('}')[0]
-      rawKeyList = rawKeyList.split(',')
-      keyOrder = []
-      for idx, rawKey in enumerate(rawKeyList):
-        for key in messageDecoded[1]:
-            if rawKey.find('"{}"'.format(key)) != -1:
-                keyOrder.append(key)
-                break
 
+    if not fail:
+      stream = messageDecoded[0]
       self.logger.info("Received registration of stream %s"%(stream))
-      result,resultText = self.dest.registerStream(stream,messageDecoded[1],keyOrder)
+      result,resultText = self.dest.registerStream(stream,recordDict,keyOrder)
 
     if result!=0:
       self.logger.warn("Unable to register stream. Got msg that is badly formatted: %s"%(msg))
