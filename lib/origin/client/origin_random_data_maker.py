@@ -1,4 +1,4 @@
-from origin.server import data_types
+from origin import data_types
 import random
 import struct
 

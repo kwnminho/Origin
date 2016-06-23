@@ -3,9 +3,7 @@ import json
 import mysql.connector
 from origin.server import template_validation
 from origin.server import measurement_validation
-from origin.server import data_types
-
-from origin import config
+from origin import data_types, current_time, config
 
 import struct
 
@@ -13,8 +11,10 @@ class mysql_destination:
     def readStreamdefTable(self):
         streamCreation = (
             "CREATE TABLE IF NOT EXISTS origin_streams ( "
-            " name varchar(1024), "
-            " version integer "
+            " id INT NOT NULL AUTO_INCREMENT,"
+            " name varchar(1024),"
+            " version integer,"
+            " PRIMARY KEY (id) "
             " ) "
         )
 
@@ -34,21 +34,21 @@ class mysql_destination:
         cursor.execute(streamFieldCreation)
 
         currentStreamNamesVersions= []
-        query = "SELECT name,version from origin_streams"
+        query = "SELECT id,name,version from origin_streams"
         cursor.execute(query)
-        for name,version in cursor:
-            currentStreamNamesVersions.append((name,version))
+        for id,name,version in cursor:
+            currentStreamNamesVersions.append((id,name,version))
 
         currentStreamNameDefinitions = {}
         currentStreamVersions = {}
-        for name,version in currentStreamNamesVersions:
+        for id,name,version in currentStreamNamesVersions:
             query = "SELECT field_name,field_type,keyIndex FROM origin_stream_fields WHERE stream_name=\"%s\" and version=%d"%(name,version)
             cursor.execute(query)
             definition = {}
             for field_name,field_type,keyIndex in cursor:
                 definition[field_name] = {"type":field_type, "keyIndex":keyIndex}
             currentStreamNameDefinitions[name] = definition
-            currentStreamVersions[name] = version
+            currentStreamVersions[name] = {"version": version, "id": id}
             
         for stream in currentStreamNameDefinitions.keys():
             for field_name in currentStreamNameDefinitions[stream].keys():
@@ -67,6 +67,7 @@ class mysql_destination:
 
         self.readStreamdefTable()
 
+    # returns version and streamID
     def registerStream(self,stream,template,keyOrder=None):
         updateDatabase = False
         destVersion = None
@@ -75,21 +76,25 @@ class mysql_destination:
             updateDatabase = True
             destVersion = 1
         else:
+            streamID = self.knownStreamVersions[stream]["id"]
+            destVersion = self.knownStreamVersions[stream]["version"]
             if template_validation(template,self.knownStreams[stream]):
                 self.logger.info("Known stream, %s matching current defintion, so no database modification needed"%(stream))
                 updateDatabase = False
             else:
                 updateDatabase = True
-                destVersion = self.knownStreamVersions[stream] + 1
+                destVersion += 1
 
         if updateDatabase:
             cursor = self.cursor
 
             if destVersion == 1:
-                query = "INSERT INTO origin_streams VALUES (\"%s\",%d)"%(stream,destVersion)
+                query = "INSERT INTO origin_streams (name, version) VALUES (\"%s\",%d)"%(stream,destVersion)
             else:
                 query = "UPDATE origin_streams SET version=%d WHERE name=\"%s\""%(destVersion,stream) 
+            print query
             print cursor.execute(query)
+            streamID = cursor.lastrowid
 
             for fieldName in template.keys():
                 idx = None
@@ -135,8 +140,9 @@ class mysql_destination:
 
             # make sure we know the current streams after all that
             self.readStreamdefTable()
-            
-        return (0,"")
+
+        print(destVersion, streamID)
+        return (0,  struct.pack("!II",destVersion,streamID))
 
     def measurement(self,measurementTime,stream,measurements):
         if stream not in self.knownStreams.keys():
@@ -168,7 +174,7 @@ class mysql_destination:
         fmt = fmt + ")"
         valuePlaceholders = valuePlaceholders + ")"
 
-        query = "INSERT INTO measurements_%s_%d %s VALUES %s"%(stream,self.knownStreamVersions[stream],fmt,valuePlaceholders)
+        query = "INSERT INTO measurements_%s_%d %s VALUES %s"%(stream,self.knownStreamVersions[stream]["version"],fmt,valuePlaceholders)
 
         self.cursor.execute(query,values)
         self.cnx.commit()
@@ -210,5 +216,13 @@ class mysql_destination:
 
         dtuple = struct.unpack_from(formatStr, measurements)
         measurementTime = dtuple[0]
+        if measurementTime == 0:
+            measurementTime = current_time(config)
         meas = list(dtuple[1:])
         return self.measurementOrdered(measurementTime,stream,meas)
+
+    def findStream(self, streamID):
+        for stream in self.knownStreamVersions:
+            if self.knownStreamVersions[stream]["id"] == streamID:
+                return stream
+        raise ValueError

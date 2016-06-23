@@ -21,8 +21,5 @@ server = origin_server.server
 
 from origin_server import formatStreamDeclaration
 
-import origin_current_time
-current_time = origin_current_time.current_time
-
 import origin_random_data_maker
 random_data = origin_random_data_maker.random_data

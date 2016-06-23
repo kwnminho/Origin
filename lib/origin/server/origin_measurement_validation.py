@@ -1,4 +1,4 @@
-from origin.server import data_types
+from origin import data_types
 
 # should check that the fields are consistent. That they aren't trying
 # to insert a string into a float field

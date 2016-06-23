@@ -1,5 +1,3 @@
-from origin_data_types import data_types
-
 from origin_measurement_validation import measurement_validation
 
 from origin_template_validation import template_validation

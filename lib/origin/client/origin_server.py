@@ -3,14 +3,14 @@ from origin.client import server_connection
 from origin.client import float_field
 from origin.client import integer_field
 from origin.client import string_field
-from origin.server import data_types
+from origin import data_types
 
 from origin import config
 
 import zmq
-import json
 import sys
 import string
+import struct
 
 def decode(measurementType):
     try:
@@ -97,21 +97,24 @@ class server:
         registerComm = formatStreamDeclaration(stream,records,keyOrder)
         
         if(registerComm == None):
-            print "can't format stream into json"
+            print "can't format stream into comma-separated format"
             return None
 
         socket.send(registerComm)
         confirmation = socket.recv()
-        confirmationDecoded = json.loads(confirmation)
+        returnCode, msg = confirmation.split(',',1)
+        print returnCode, msg
 
-
-        if confirmationDecoded[0] != 0:
+        if int(returnCode) != 0:
             print "Problem registering stream",stream
-            print confirmationDecoded[1]
+            print msg
             return None
+
+        version, streamID = struct.unpack("!II",msg)
+        print("successfully registered with streamID: {}, version: {}".format(streamID,version))
  
         # error checking
         socket_data = context.socket(zmq.PUSH)
         msgport = config["origin_measure_port"]
         socket_data.connect("tcp://%s:%s"%(host,msgport))
-        return server_connection(stream,keyOrder,records,context,socket_data)
+        return server_connection(stream,streamID,keyOrder,records,context,socket_data)

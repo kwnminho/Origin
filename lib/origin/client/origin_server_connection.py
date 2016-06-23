@@ -1,7 +1,6 @@
 import json
 import sys
-from origin.server import data_types
-from origin import config
+from origin import data_types, config
 import struct
 import ctypes
 
@@ -12,7 +11,7 @@ def makeFormatString(keyOrder, records):
     except KeyError:
         tsType = "uint"
     tsSize = data_types[tsType]["size"]
-    fstr = "!" + data_types[tsType]["format_char"]# network byte order
+    fstr = "!I" + data_types[tsType]["format_char"]# network byte order
 
     dataLength = tsSize
     for entry in keyOrder:
@@ -22,8 +21,9 @@ def makeFormatString(keyOrder, records):
 
 
 class server_connection:
-    def __init__(self,stream,keyOrder,records,context,socket):
+    def __init__(self,stream,streamID,keyOrder,records,context,socket):
         self.stream = stream
+        self.streamID = streamID
         self.keyOrder = keyOrder
         self.records = records
         self.context = context
@@ -31,7 +31,12 @@ class server_connection:
         self.format_string, self.data_size = makeFormatString(keyOrder,records)
 
     def send(self,**kwargs):
-        msgData = [ kwargs["recordTime"] ]
+        msgData = [ self.streamID ]
+        try:
+            msgData.append(kwargs["recordTime"])
+        except KeyError:
+            # 0 value timestamp means timestamp at server
+            msgData.append(0)
         for k in self.keyOrder:
             msgData.append(kwargs[k])
         self.socket.send( self.formatRecord(msgData) )
@@ -41,7 +46,4 @@ class server_connection:
         self.socket.close()
         
     def formatRecord(self, data):
-        header = json.dumps([self.stream]) # options go into json array
-        msg = ctypes.create_string_buffer( header, self.data_size + len(header) )
-        struct.pack_into( self.format_string, msg, len(header), *data )
-        return msg
+        return struct.pack( self.format_string, *data )

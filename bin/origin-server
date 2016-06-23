@@ -31,6 +31,7 @@ from origin.server import mysql_destination
 
 
 import json
+import struct
 
 """
 ..module::MonServer
@@ -66,20 +67,19 @@ class MonServer(object):
     fail = False
 
     binaryData = False
+
     try:
-      try: 
+      try: # try json encoding first
         messageDecoded = json.loads(msg)
         stream = messageDecoded[0]
       except ValueError:
-        # json failed, check for json substring
-        if msg[0] == '[':
-          header, data = msg.split(']', 1) # TODO: this will fail if the json contains any sub-lists
-          header += ']'
-          stream = json.loads(header)[0]
+        try: # try binary encoding next
+          streamID = struct.unpack("!I",msg[:4])[0]
+          stream = self.dest.findStream(streamID)
+          data = msg[4:] # remove first 4 bytes
           binaryData = True
-            
-        else:
-          raise ValueError
+        except:
+          raise
 
     except:
       result = 1
@@ -160,9 +160,10 @@ class MonServer(object):
     if result!=0:
       self.logger.warn("Unable to register stream. Got msg that is badly formatted: %s"%(msg))
                        
-    returnMessage = [result,resultText]
+    returnMessage = (str(result),resultText)
+    print returnMessage
 
-    reg_stream.send(json.dumps(returnMessage))
+    reg_stream.send(','.join(returnMessage))
 
   def processAlertMsg(self,alert_stream,msg):
     #Placeholder for testing alert messages 

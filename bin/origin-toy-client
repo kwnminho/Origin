@@ -23,7 +23,7 @@ else:
 from origin.client import monitoring_record
 from origin.client import server
 from origin.client import server_connection
-from origin.client import current_time
+from origin import current_time
 
 # just a proxy for actually doing something useful
 def makeTempMeasurement():
@@ -53,10 +53,6 @@ time.sleep(5)
 while True:
     print "sending...."
     t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
-    connection.send(recordTime=current_time(),toy1=t1,toy2=t2)
+    connection.send(recordTime=current_time(origin.config),toy1=t1,toy2=t2)
     print("toy1: {}\ntoy2: {}".format(t1,t2))
     time.sleep(5)
-
-
-
-

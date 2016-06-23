@@ -1,10 +1,9 @@
 import calendar
 import time
-from origin import config
 
 # Just figures out the current time in the format that origin wants
 # Unix time (in UTC)
-def current_time():
+def current_time(config):
     if "timestamp_type" in config:
         if config["timestamp_type"] == "uint64":
             return long(time.time()*2**32)

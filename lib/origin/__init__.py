@@ -15,3 +15,6 @@ def configure(bundle):
     if config == None:
         print "Unknown configuration .... ", bundle
         sys.exit(1)
+
+from origin_current_time import current_time
+from origin_data_types import data_types
