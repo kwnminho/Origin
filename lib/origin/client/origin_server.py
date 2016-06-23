@@ -11,6 +11,7 @@ import zmq
 import sys
 import string
 import struct
+import json
 
 def decode(measurementType):
     try:
@@ -33,7 +34,7 @@ def declarationFormater(stream,records,keyOrder):
     return ','.join(decStr)
 
 
-def formatStreamDeclaration(stream,records,keyOrder):
+def formatStreamDeclaration(stream,records,keyOrder,format):
     measurements = records.keys()
     sentDict = {}
     for m in measurements:
@@ -43,7 +44,12 @@ def formatStreamDeclaration(stream,records,keyOrder):
             return None
         else:
             sentDict[m] = decodedType
-    return declarationFormater(stream,sentDict,keyOrder)
+    if (format is not None) and (format.lower() == "json"):
+        if keyOrder is not None:
+            print "Warning: JSON formatting selected and a key order has been defined. JSON object order is not gaurenteed therefore it is not recommended to use binary data packets."
+        return json.dumps((stream,sentDict), sort_keys=True) # make deterministic
+    else:
+        return declarationFormater(stream,sentDict,keyOrder)
 
 def simpleString(input):
     invalidChars = set(string.punctuation.replace("_",""))
@@ -78,7 +84,7 @@ class server:
     def ping(self):
         return True
 
-    def registerStream(self,stream,records,keyOrder=None):
+    def registerStream(self,stream,records,keyOrder=None,format=None):
         valid = validateStreamDeclaration(stream,records)
 
         if valid != 0:
@@ -92,12 +98,14 @@ class server:
         host=config["origin_server"]
         socket.connect ("tcp://%s:%s" % (host,port))
 
-        if keyOrder is None:
+        if (keyOrder is None) and (format is None):
             keyOrder = records.keys()
-        registerComm = formatStreamDeclaration(stream,records,keyOrder)
+        registerComm = formatStreamDeclaration(stream,records,keyOrder,format)
         
         if(registerComm == None):
-            print "can't format stream into comma-separated format"
+            if format is None:
+                format = "comma-separated values"
+            print "can't format stream into {}".format(format)
             return None
 
         socket.send(registerComm)
@@ -117,4 +125,4 @@ class server:
         socket_data = context.socket(zmq.PUSH)
         msgport = config["origin_measure_port"]
         socket_data.connect("tcp://%s:%s"%(host,msgport))
-        return server_connection(stream,streamID,keyOrder,records,context,socket_data)
+        return server_connection(stream,streamID,keyOrder,format,records,context,socket_data)

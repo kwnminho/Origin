@@ -53,7 +53,8 @@ numEntries = len(records)
 # alert the server that we are going to be sending this type of data
 connection = serv.registerStream(
     stream=streamName,
-    records=records
+    records=records,
+    format="json"
 )
 
 # perhaps print some useful message. Perhaps try to reconnect....

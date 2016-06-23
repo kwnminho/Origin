@@ -92,7 +92,6 @@ class mysql_destination:
                 query = "INSERT INTO origin_streams (name, version) VALUES (\"%s\",%d)"%(stream,destVersion)
             else:
                 query = "UPDATE origin_streams SET version=%d WHERE name=\"%s\""%(destVersion,stream) 
-            print query
             print cursor.execute(query)
             streamID = cursor.lastrowid
 
@@ -141,7 +140,6 @@ class mysql_destination:
             # make sure we know the current streams after all that
             self.readStreamdefTable()
 
-        print(destVersion, streamID)
         return (0,  struct.pack("!II",destVersion,streamID))
 
     def measurement(self,measurementTime,stream,measurements):

@@ -61,11 +61,9 @@ class MonServer(object):
   def processSingleDataMsg(self,msg):
     messageDecoded = None
     stream = None
-
     result = None
     resultText = None
     fail = False
-
     binaryData = False
 
     try:
@@ -80,7 +78,6 @@ class MonServer(object):
           binaryData = True
         except:
           raise
-
     except:
       result = 1
       resultText = "Failed to decode message from client"
@@ -97,7 +94,6 @@ class MonServer(object):
         elif type(messageDecoded[1]) != int:
           result = 1
           resultText = "Non-integer time sent"
-
         else:
           recordTime = messageDecoded[1]
           measurements = messageDecoded[2]
@@ -129,15 +125,15 @@ class MonServer(object):
       # do a simple check for json formating first
       if msg[0] == '[':
         messageDecoded = json.loads(msg)
-        reocrdDict = messageDecoded[1]
+        recordDict = messageDecoded[1]
         rawKeyList = msg.split('{')[1]
         rawKeyList = rawKeyList.split('}')[0]
         rawKeyList = rawKeyList.split(',')
         for idx, rawKey in enumerate(rawKeyList):
           for key in recordDict:
-              if rawKey.find('"{}"'.format(key)) != -1:
-                  keyOrder.append(key)
-                  break
+            if rawKey.find('"{}"'.format(key)) != -1:
+              keyOrder.append(key)
+              break
       # otherwise try comma-separated format
       else:
         messageDecoded = msg.split(',')
@@ -161,8 +157,6 @@ class MonServer(object):
       self.logger.warn("Unable to register stream. Got msg that is badly formatted: %s"%(msg))
                        
     returnMessage = (str(result),resultText)
-    print returnMessage
-
     reg_stream.send(','.join(returnMessage))
 
   def processAlertMsg(self,alert_stream,msg):

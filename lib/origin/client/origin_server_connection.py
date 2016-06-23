@@ -21,14 +21,21 @@ def makeFormatString(keyOrder, records):
 
 
 class server_connection:
-    def __init__(self,stream,streamID,keyOrder,records,context,socket):
+    def __init__(self,stream,streamID,keyOrder,format,records,context,socket):
         self.stream = stream
         self.streamID = streamID
         self.keyOrder = keyOrder
+        try:
+            self.format = format.lower()
+        except AttributeError:
+            self.format = None
         self.records = records
         self.context = context
         self.socket = socket
-        self.format_string, self.data_size = makeFormatString(keyOrder,records)
+        if keyOrder is None:
+            self.format_string, self.data_size = (None, None)
+        else:
+            self.format_string, self.data_size = makeFormatString(keyOrder,records)
 
     def send(self,**kwargs):
         msgData = [ self.streamID ]
@@ -37,9 +44,17 @@ class server_connection:
         except KeyError:
             # 0 value timestamp means timestamp at server
             msgData.append(0)
-        for k in self.keyOrder:
-            msgData.append(kwargs[k])
-        self.socket.send( self.formatRecord(msgData) )
+        if self.format is None:
+            for k in self.keyOrder:
+                msgData.append(kwargs[k])
+            self.socket.send( self.formatRecord(msgData) )
+        elif self.format == "json":
+            msgMap = {}
+            for k in kwargs.keys():
+                if k != "recordTime":
+                    msgMap[k] = kwqrgs[k]
+            msgData.append(msgMap)
+            self.socket.send(json.dumps(msgData))
 
     def close(self):
         print "closing socket"
