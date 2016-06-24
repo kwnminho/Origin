@@ -97,7 +97,7 @@ class MonServer(object):
         else:
           recordTime = messageDecoded[1]
           measurements = messageDecoded[2]
-          result,resultText = self.dest.measurement(recordTime,stream,measurements)
+          result,resultText = self.dest.measurement(stream,measurements)
 
     if result != 0:
       self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))

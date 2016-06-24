@@ -1,6 +1,6 @@
 import json
 import sys
-from origin import data_types, config
+from origin import data_types, config, timestamp
 import struct
 import ctypes
 
@@ -40,7 +40,7 @@ class server_connection:
     def send(self,**kwargs):
         msgData = [ self.streamID ]
         try:
-            msgData.append(kwargs["recordTime"])
+            msgData.append(kwargs[timestamp])
         except KeyError:
             # 0 value timestamp means timestamp at server
             msgData.append(0)
@@ -51,7 +51,7 @@ class server_connection:
         elif self.format == "json":
             msgMap = {}
             for k in kwargs.keys():
-                if k != "recordTime":
+                if k != config.timestamp:
                     msgMap[k] = kwqrgs[k]
             msgData.append(msgMap)
             self.socket.send(json.dumps(msgData))

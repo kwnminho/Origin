@@ -48,7 +48,6 @@ records={
     "toy_float":"float",
     "toy_double":"double",
 }
-numEntries = len(records)
 
 # alert the server that we are going to be sending this type of data
 connection = serv.registerStream(

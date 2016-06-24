@@ -72,7 +72,7 @@ time.sleep(2)
 
 while True:
     print "sending...."
-    data = {"recordTime": current_time(origin.config)}
+    data = {origin.timestamp: current_time(origin.config)}
     for entry in records:
         data[entry] = random_data( records[entry] )
     print data
