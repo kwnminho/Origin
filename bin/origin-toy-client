@@ -56,4 +56,4 @@ while True:
     data = { timestamp: current_time(origin.config), "toy1": t1, "toy2": t2 }
     connection.send(**data)
     print("toy1: {}\ntoy2: {}".format(t1,t2))
-    time.sleep(5)
+    time.sleep(1)

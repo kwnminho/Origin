@@ -57,18 +57,21 @@ class hdf5_destination(destination):
         # stream_group['currentVersion'] = h5py.SoftLink(stream_ver)
 
         # data sets for each field plus the timestamp
+        chunksize=(config['hdf5_chunksize'],) # 8 for testing
         stream_ver.create_dataset(
                 timestamp
-                , (2**10,)
+                , chunksize
                 , maxshape = (None,)
                 , dtype=data_types[config['timestamp_type']]['numpy']
+                , chunks=chunksize
         )
         for field in template:
             stream_ver.create_dataset(
                     field
-                    , (2**10,)
+                    , chunksize
                     , maxshape = (None,)
                     , dtype=data_types[template[field]]['numpy']
+                    , chunks=chunksize
             )
     
         # update the stream inventory, in memory and on disk
@@ -87,13 +90,20 @@ class hdf5_destination(destination):
         return streamID
 
     def insertMeasurement(self,stream,measurements):
-        dset = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
-        if 'row_count' in dset.attrs:
-            row_count = dset.attrs['row_count'] + 1
+        dgroup = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
+        if 'row_count' in dgroup.attrs:
+            row_count = dgroup.attrs['row_count'] + 1
+            if row_count == dgroup[timestamp].shape[0]:
+                self.logger.debug("Current chunk is filled extending size of array.")
+                length = dgroup[timestamp].shape[0]
+                for dset in dgroup:
+                    dgroup[dset].resize((length+config['hdf5_chunksize'],))
         else:
             row_count = 0
-        dset.attrs['row_count'] = row_count # move pointer for next entry
+
+        dgroup.attrs['row_count'] = row_count # move pointer for next entry
         self.logger.debug("Stream `{}` current row pointer: {}".format(stream,row_count))
 
         for field in measurements:
-            dset[field][row_count] = measurements[field]
+            self.logger.debug("Dataset `{}.{}` shape: {}".format(stream,field,dgroup[field].shape))
+            dgroup[field][row_count] = measurements[field]

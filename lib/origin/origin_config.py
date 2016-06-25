@@ -23,6 +23,7 @@ configTest={
   "timestamp_type"  : "uint64",
   "data_path"       : os.path.join(var_path,"data"),
   "data_file"       : os.path.join(var_path,"data","origintest.hdf5"),
+  "hdf5_chunksize"  : 2**10,
 }
 
 configSite={
@@ -42,4 +43,5 @@ configSite={
   "timestamp_type"  : "uint64",
   "data_path"       : os.path.join(var_path,"data"),
   "data_file"       : os.path.join(var_path,"data","origin.hdf5"),
+  "hdf5_chunksize"  : 2**10,
 }
