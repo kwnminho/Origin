@@ -27,8 +27,8 @@ import zmq
 from zmq.eventloop import ioloop
 from zmq.eventloop.zmqstream import ZMQStream
 
-from origin.server import mysql_destination
-
+#from origin.server import mysql_destination
+from origin.server import hdf5_destination
 
 import json
 import struct
@@ -56,7 +56,7 @@ class MonServer(object):
     self.streamfile = ""
     self.state = "UNKNOWN"
     self._strlist = {}
-    self.dest = mysql_destination(logger)
+    self.dest = hdf5_destination(logger)
     
   def processSingleDataMsg(self,msg):
     messageDecoded = None

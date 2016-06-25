@@ -7,3 +7,4 @@ from origin_destination import destination
 from origin_filesystem_destination import filesystem_destination
 
 from origin_mysql_destination import mysql_destination
+from origin_hdf5_destination import hdf5_destination
