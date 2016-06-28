@@ -59,7 +59,7 @@ class hdf5_destination(destination):
         # data sets for each field plus the timestamp
         # also make a buffer dataset for each field a as a pseudo circular buffer
         chunksize=(config['hdf5_chunksize'],) 
-        buff_size = (2*chunksize[0],)
+        buff_size = (config['hdf5_chunksize'],)
         print buff_size
         stream_ver.create_dataset(
                 timestamp
@@ -113,24 +113,16 @@ class hdf5_destination(destination):
         if 'row_count' in dgroup.attrs:
             row_count = dgroup.attrs['row_count']
             row_count_buffer = dgroup.attrs['row_count_buffer'] + 1
-            if (row_count_buffer == dgroup[timestamp + '_buffer'].shape[0]):
-                self.logger.debug("Buffer is full. Moving completed chunk to archive.")
+            buffer_size = dgroup[timestamp + '_buffer'].shape[0]
+            if (row_count_buffer == buffer_size):
+                self.logger.debug("Buffer is full. Moving completed chunk to archive and wrapping pointer around.")
                 length = dgroup[timestamp].shape[0]
                 chunksize=config['hdf5_chunksize'] 
                 for field in measurements:
-                    if row_count == 0:
-                        self.logger.debug("First transfer to archive. Moving both chunks.")
-                        temp_chunk = dgroup[field+'_buffer']
-                        dgroup[field+'_buffer'][:chunksize] = temp_chunk[chunksize:]
-                    else:
-                        temp_chunk = dgroup[field+'_buffer'][chunksize:]
-                        dgroup[field+'_buffer'][:chunksize] = temp_chunk
+                    dgroup[field][row_count:] = dgroup[field+'_buffer']
                     dgroup[field].resize((length+config['hdf5_chunksize'],))
-                    dgroup[field][row_count:] = temp_chunk
-                if row_count == 0:
-                    row_count += chunksize
-                row_count += chunksize
-                row_count_buffer -= chunksize
+                row_count += buffer_size
+                row_count_buffer = 0
         else:
             row_count = 0
             row_count_buffer = 0
