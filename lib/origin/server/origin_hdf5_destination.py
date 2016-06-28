@@ -57,11 +57,22 @@ class hdf5_destination(destination):
         # stream_group['currentVersion'] = h5py.SoftLink(stream_ver)
 
         # data sets for each field plus the timestamp
-        chunksize=(config['hdf5_chunksize'],) # 8 for testing
+        # also make a buffer dataset for each field a as a pseudo circular buffer
+        chunksize=(config['hdf5_chunksize'],) 
+        buff_size = (2*chunksize[0],)
+        print buff_size
         stream_ver.create_dataset(
                 timestamp
                 , chunksize
                 , maxshape = (None,)
+                , dtype=data_types[config['timestamp_type']]['numpy']
+                , chunks=chunksize
+                , compression=config['hdf5_compression']
+        )
+        stream_ver.create_dataset(
+                timestamp + "_buffer"
+                , buff_size
+                , maxshape = buff_size
                 , dtype=data_types[config['timestamp_type']]['numpy']
                 , chunks=chunksize
         )
@@ -70,6 +81,14 @@ class hdf5_destination(destination):
                     field
                     , chunksize
                     , maxshape = (None,)
+                    , dtype=data_types[template[field]]['numpy']
+                    , chunks=chunksize
+                    , compression=config['hdf5_compression']
+            )
+            stream_ver.create_dataset(
+                    field + "_buffer"
+                    , buff_size
+                    , maxshape = buff_size
                     , dtype=data_types[template[field]]['numpy']
                     , chunks=chunksize
             )
@@ -92,18 +111,35 @@ class hdf5_destination(destination):
     def insertMeasurement(self,stream,measurements):
         dgroup = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
         if 'row_count' in dgroup.attrs:
-            row_count = dgroup.attrs['row_count'] + 1
-            if row_count == dgroup[timestamp].shape[0]:
-                self.logger.debug("Current chunk is filled extending size of array.")
+            row_count = dgroup.attrs['row_count']
+            row_count_buffer = dgroup.attrs['row_count_buffer'] + 1
+            if (row_count_buffer == dgroup[timestamp + '_buffer'].shape[0]):
+                self.logger.debug("Buffer is full. Moving completed chunk to archive.")
                 length = dgroup[timestamp].shape[0]
-                for dset in dgroup:
-                    dgroup[dset].resize((length+config['hdf5_chunksize'],))
+                chunksize=config['hdf5_chunksize'] 
+                for field in measurements:
+                    if row_count == 0:
+                        self.logger.debug("First transfer to archive. Moving both chunks.")
+                        temp_chunk = dgroup[field+'_buffer']
+                        dgroup[field+'_buffer'][:chunksize] = temp_chunk[chunksize:]
+                    else:
+                        temp_chunk = dgroup[field+'_buffer'][chunksize:]
+                        dgroup[field+'_buffer'][:chunksize] = temp_chunk
+                    dgroup[field].resize((length+config['hdf5_chunksize'],))
+                    dgroup[field][row_count:] = temp_chunk
+                if row_count == 0:
+                    row_count += chunksize
+                row_count += chunksize
+                row_count_buffer -= chunksize
         else:
             row_count = 0
+            row_count_buffer = 0
 
         dgroup.attrs['row_count'] = row_count # move pointer for next entry
+        dgroup.attrs['row_count_buffer'] = row_count_buffer # move pointer for next entry
         self.logger.debug("Stream `{}` current row pointer: {}".format(stream,row_count))
+        self.logger.debug("Stream `{}` current row buffer pointer: {}".format(stream,row_count_buffer))
 
+        self.logger.debug("Datasets `{}.*` shape: {}".format(stream,dgroup[timestamp].shape))
         for field in measurements:
-            self.logger.debug("Dataset `{}.{}` shape: {}".format(stream,field,dgroup[field].shape))
-            dgroup[field][row_count] = measurements[field]
+            dgroup[field+"_buffer"][row_count_buffer] = measurements[field]

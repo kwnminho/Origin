@@ -23,7 +23,8 @@ configTest={
   "timestamp_type"  : "uint64",
   "data_path"       : os.path.join(var_path,"data"),
   "data_file"       : os.path.join(var_path,"data","origintest.hdf5"),
-  "hdf5_chunksize"  : 2**10,
+  "hdf5_chunksize"  : 2**3, # for testing (make 1kB to 1MB)
+  "hdf5_compression"  : 'gzip', # False for no compression
 }
 
 configSite={
@@ -44,4 +45,5 @@ configSite={
   "data_path"       : os.path.join(var_path,"data"),
   "data_file"       : os.path.join(var_path,"data","origin.hdf5"),
   "hdf5_chunksize"  : 2**10,
+  "hdf5_compression"  : 'gzip', # False for no compression
 }
