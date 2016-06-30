@@ -21,4 +21,4 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 - Backend storage with MySQL
 - Supported datatypes: int, float, string
 
-[Unreleased]: https://github.com/OrthogonalSystems/Origin/compare/v0.1...HEAD
+[Unreleased]: https://github.com/Orthogonal-Systems/Origin/compare/v0.1.0...HEAD
