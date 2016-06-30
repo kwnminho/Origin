@@ -135,7 +135,7 @@ class destination:
     # get statistics on the stream.field data during the time window time = [start, stop]
     def getStatStreamFieldData(self,stream,field,start=None,stop=None):
       try:
-        fieldData = self.getRawStreamData(stream,field,start,stop)
+        fieldData = self.getRawStreamFieldData(stream,field,start,stop)
         data = {}
         avg = np.nanmean(fieldData[field])
         std = np.nanstd(fieldData[field])
@@ -144,26 +144,21 @@ class destination:
         data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
       except:
-        print "Exception in user code:"
-        print '-'*60
-        traceback.print_exc(file=sys.stdout)
-        print '-'*60
         result, resultText = (1,"Could not process request.")
       finally:
         return (result,resultText)
 
     def validateTimeRange(self,start,stop):
-        self.logger.debug("entered timestamp method")
         try:
-            stop = long(stop*2**32)
-        except:
+            stop = long(stop)*2**32
+        except TypeError:
             stop = current_time(config)
         try:
-            start = long(start*2**32)
-        except:
+            start = long(start)*2**32
+        except TypeError:
             start = stop - 5*60L*2**32 # 5 minute range default
         if start > stop:
+            self.logger.info("Requested read range out of order. Swapping range.")
             return (stop, start)
         else:
             return (start, stop)
-

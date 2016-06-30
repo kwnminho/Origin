@@ -33,6 +33,7 @@ configSite={
   "origin_register_port"    : "5556",
   "origin_measure_port"     : "5557", 
   "origin_alert_port"       : "5558",
+  "origin_read_port"       : "5559",
   "alert_check_period"      : "30",
   "mysql_local_server"      : "127.0.0.1",
   "mysql_local_db"          : "origin",

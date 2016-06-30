@@ -141,7 +141,7 @@ class hdf5_destination(destination):
     # only takes timestamps in seconds
     def getRawStreamData(self,stream,start=None,stop=None,definition=None):
         start, stop = self.validateTimeRange(start,stop)
-        self.logger.debug("(start, stop): ({},{})".format(start,stop))
+        self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
         # get data from buffer
         stream_group = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
         if definition is None:
@@ -185,8 +185,6 @@ class hdf5_destination(destination):
         # check if the buffer has the requested range first, it usually will be
         buff_start = raw_data[timestamp][0]
         buff_stop = raw_data[timestamp][-1]
-        self.logger.debug("buffer start, stop")
-        self.logger.debug((buff_start,buff_stop))
         if buff_start > start: # if not go look for it
             self.logger.debug("shouldn't be here")
             raw_data = self.getArchivedStreamData(self,stream,start,stop,raw_data)
@@ -197,26 +195,24 @@ class hdf5_destination(destination):
         for i,ts in enumerate(raw_data[timestamp]):
             if (idx_start is None) and (ts >= start):
                 idx_start = i
-                self.logger.debug("start found")
             elif ts > stop:
                 idx_stop = i-1
-                self.logger.debug("stop found")
                 break
         if idx_stop is None:
             idx_stop = -1
         if (idx_start is None) or (idx_stop is None):
-            self.logger.debug("error in indexing")
-            self.logger.debug((idx_start,idx_stop))
+            self.logger.warning("error in indexing (index start, index stop): ({},{})".format(idx_start,idx_stop))
             raise IndexError
         self.logger.debug((idx_start,idx_stop))
         data = {}
         for field in definition:
-            data[field] = raw_data[field][idx_start:idx_stop].tolist()
+            data[field] = raw_data[field][idx_start:idx_stop].tolist() # json method cant handle numpy array
         return data
         
     # read stream.field data from storage between the timestamps given by time = [start,stop]
     def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        return self.getRawStreamData(stream,start,stop, {field:''}) # send dummy dict with single field
+        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
 
+    # get raw_data in range from the archived data
     def getArchivedStreamData(self,stream,start,stop,buffer_data):
         raise NotImplementedError

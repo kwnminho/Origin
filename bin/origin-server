@@ -199,12 +199,10 @@ class MonServer(object):
       if 'start' in request_obj:
         start = request_obj['start']
       else:
-        self.logger.debug("No start time specified, using default.".format(stream))
         start = None
       if 'stop' in request_obj:
         stop = request_obj['stop']
       else:
-        self.logger.debug("No stop time specified, using default.".format(stream))
         stop = None
 
       try:
@@ -224,11 +222,9 @@ class MonServer(object):
           else:
             result, resultText = self.dest.getStatStreamData(stream,start,stop)
       except:
-        print "Exception in user code:"
-        print '-'*60
-        traceback.print_exc(file=sys.stdout)
-        print '-'*60
-        result, resultText = (1, "Server error encountered")
+        self.logger.error("Unexpected exception in read message code:")
+        self.logger.error(traceback.print_exc(file=sys.stdout))
+        result, resultText = (1, "Server encountered an error.")
 
     finally:
       returnMessage = (result,resultText)
