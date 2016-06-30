@@ -3,6 +3,8 @@ from origin.server import measurement_validation
 from origin import data_types, current_time, config, timestamp
 
 import struct
+import numpy as np
+import sys, traceback
 
 class destination:
     def __init__(self,logger):
@@ -104,3 +106,64 @@ class destination:
             if self.knownStreamVersions[stream]["id"] == streamID:
                 return stream
         raise ValueError
+
+    # read stream data from storage between the timestamps given by time = [start,stop]
+    def getRawStreamData(self,stream,start=None,stop=None):
+        raise NotImplementedError
+        
+    # read stream.field data from storage between the timestamps given by time = [start,stop]
+    def getRawStreamFieldData(self,stream,field,start=None,stop=None):
+        raise NotImplementedError
+        
+    # get statistics on the stream data during the time window time = [start, stop]
+    def getStatStreamData(self,stream,start=None,stop=None):
+        try:
+            streamData = self.getRawStreamData(stream,start,stop)
+            data = {}
+            for field in streamData:
+                avg = np.nanmean(streamData[field])
+                std = np.nanstd(streamData[field])
+                max = np.nanmax(streamData[field])
+                min = np.nanmin(streamData[field])
+                data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
+            result, resultText = (0,data)
+        except:
+            result, resultText = (1,"Could not process request.")
+        finally:
+            return (result,resultText)
+
+    # get statistics on the stream.field data during the time window time = [start, stop]
+    def getStatStreamFieldData(self,stream,field,start=None,stop=None):
+      try:
+        fieldData = self.getRawStreamData(stream,field,start,stop)
+        data = {}
+        avg = np.nanmean(fieldData[field])
+        std = np.nanstd(fieldData[field])
+        max = np.nanmax(fieldData[field])
+        min = np.nanmin(fieldData[field])
+        data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
+        result, resultText = (0,data)
+      except:
+        print "Exception in user code:"
+        print '-'*60
+        traceback.print_exc(file=sys.stdout)
+        print '-'*60
+        result, resultText = (1,"Could not process request.")
+      finally:
+        return (result,resultText)
+
+    def validateTimeRange(self,start,stop):
+        self.logger.debug("entered timestamp method")
+        try:
+            stop = long(stop*2**32)
+        except:
+            stop = current_time(config)
+        try:
+            start = long(start*2**32)
+        except:
+            start = stop - 5*60L*2**32 # 5 minute range default
+        if start > stop:
+            return (stop, start)
+        else:
+            return (start, stop)
+

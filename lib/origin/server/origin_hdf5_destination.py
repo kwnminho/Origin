@@ -3,6 +3,7 @@ import json
 from origin.server import destination
 from origin import data_types, config, timestamp
 import os
+import numpy as np
 
 class hdf5_destination(destination):
     def connect(self):
@@ -129,9 +130,93 @@ class hdf5_destination(destination):
 
         dgroup.attrs['row_count'] = row_count # move pointer for next entry
         dgroup.attrs['row_count_buffer'] = row_count_buffer # move pointer for next entry
-        self.logger.debug("Stream `{}` current row pointer: {}".format(stream,row_count))
-        self.logger.debug("Stream `{}` current row buffer pointer: {}".format(stream,row_count_buffer))
+        #self.logger.debug("Stream `{}` current row pointer: {}".format(stream,row_count))
+        #self.logger.debug("Stream `{}` current row buffer pointer: {}".format(stream,row_count_buffer))
 
-        self.logger.debug("Datasets `{}.*` shape: {}".format(stream,dgroup[timestamp].shape))
+        #self.logger.debug("Datasets `{}.*` shape: {}".format(stream,dgroup[timestamp].shape))
         for field in measurements:
             dgroup[field+"_buffer"][row_count_buffer] = measurements[field]
+
+    # read stream data from storage between the timestamps given by time = [start,stop]
+    # only takes timestamps in seconds
+    def getRawStreamData(self,stream,start=None,stop=None,definition=None):
+        start, stop = self.validateTimeRange(start,stop)
+        self.logger.debug("(start, stop): ({},{})".format(start,stop))
+        # get data from buffer
+        stream_group = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
+        if definition is None:
+            definition = self.knownStreams[stream]
+
+        # read ring buffers and pointers in case the pointer advances during read
+        raw_data = {}
+        raw_data[timestamp] = { 
+                'pointer': stream_group.attrs['row_count_buffer'] # pointer in ring buffer
+                ,'array':  stream_group[timestamp + '_buffer']
+        }
+        for field in definition:
+            raw_data[field] = { 
+                    'pointer': stream_group.attrs['row_count_buffer'] # pointer in ring buffer
+                    ,'array':  stream_group[field + '_buffer']
+            }
+
+        # correct the ring buffer order to linear
+        pointer = raw_data[timestamp]['pointer']+1
+        array = raw_data[timestamp]['array']
+
+        raw_data[timestamp] = np.concatenate((array[pointer:],array[:pointer]))
+#        for i in range(len(raw_data[timestamp])-1):
+#            if(raw_data[timestamp][i+1]-raw_data[timestamp][i] < 0):
+#                print "order error detected at position: " + str(i)
+#                break
+        for field in definition:
+            field_pointer = raw_data[field]['pointer']+1
+            offset = field_pointer - pointer
+            array = raw_data[field]['array']
+            length = len(array)
+            if offset < 0:
+                self.logger.debug("negative offset")
+                offset += length
+            raw_data[field] = np.concatenate((
+                np.full(offset,None)
+                ,array[pointer+offset:]
+                ,array[:pointer+offset]
+            ))[:length]
+
+        # check if the buffer has the requested range first, it usually will be
+        buff_start = raw_data[timestamp][0]
+        buff_stop = raw_data[timestamp][-1]
+        self.logger.debug("buffer start, stop")
+        self.logger.debug((buff_start,buff_stop))
+        if buff_start > start: # if not go look for it
+            self.logger.debug("shouldn't be here")
+            raw_data = self.getArchivedStreamData(self,stream,start,stop,raw_data)
+
+        # now filter the data down to the requested range
+        idx_start = None
+        idx_stop = None
+        for i,ts in enumerate(raw_data[timestamp]):
+            if (idx_start is None) and (ts >= start):
+                idx_start = i
+                self.logger.debug("start found")
+            elif ts > stop:
+                idx_stop = i-1
+                self.logger.debug("stop found")
+                break
+        if idx_stop is None:
+            idx_stop = -1
+        if (idx_start is None) or (idx_stop is None):
+            self.logger.debug("error in indexing")
+            self.logger.debug((idx_start,idx_stop))
+            raise IndexError
+        self.logger.debug((idx_start,idx_stop))
+        data = {}
+        for field in definition:
+            data[field] = raw_data[field][idx_start:idx_stop].tolist()
+        return data
+        
+    # read stream.field data from storage between the timestamps given by time = [start,stop]
+    def getRawStreamFieldData(self,stream,field,start=None,stop=None):
+        return self.getRawStreamData(stream,start,stop, {field:''}) # send dummy dict with single field
+
+    def getArchivedStreamData(self,stream,start,stop,buffer_data):
+        raise NotImplementedError

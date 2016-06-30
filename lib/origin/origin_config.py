@@ -11,6 +11,7 @@ configTest={
   "origin_register_port"    : "5556",
   "origin_measure_port"     : "5557", 
   "origin_alert_port"       : "5558",
+  "origin_read_port"       : "5559",
   "alert_check_period"      : "30",
   "mysql_local_server"      : "127.0.0.1",
   "mysql_local_db"          : "origintest",
@@ -23,7 +24,7 @@ configTest={
   "timestamp_type"  : "uint64",
   "data_path"       : os.path.join(var_path,"data"),
   "data_file"       : os.path.join(var_path,"data","origintest.hdf5"),
-  "hdf5_chunksize"  : 2**3, # for testing (make 1kB to 1MB)
+  "hdf5_chunksize"  : 2**10, # for testing (make 1kB to 1MB)
   "hdf5_compression"  : 'gzip', # False for no compression
 }
 

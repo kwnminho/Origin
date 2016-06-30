@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 
-import sys
+import sys, traceback
 import os
 print os.getcwd()
 print sys.argv[0]
@@ -163,7 +163,7 @@ class MonServer(object):
     #Placeholder for testing alert messages 
     try:
       messageDecoded = json.loads(msg)
-    except:
+    except ValueError:
       result = 1
       resultText = "Failed to decode alert"
       fail = True
@@ -180,6 +180,61 @@ class MonServer(object):
     for l in list:
       d = l*l
        
+  def processReadMsg(self,read_stream,msg):
+    for m in msg:
+      if m != '':
+        self.processSingleReadMsg(read_stream,m)
+
+  def processSingleReadMsg(self, read_stream, msg):
+    try:
+      request_obj = json.loads(msg)
+      stream = request_obj['stream'].strip()
+    except ValueError:
+      result = 1
+      resultText = "Failed to decode request"
+    except KeyError:
+      result = 1
+      resultText = "Request did not have stream property."
+    else:
+      if 'start' in request_obj:
+        start = request_obj['start']
+      else:
+        self.logger.debug("No start time specified, using default.".format(stream))
+        start = None
+      if 'stop' in request_obj:
+        stop = request_obj['stop']
+      else:
+        self.logger.debug("No stop time specified, using default.".format(stream))
+        stop = None
+
+      try:
+        if 'field' in request_obj:
+          field = request_obj['field'].strip()
+          self.logger.debug("Read request for stream `{}.{}` recieved.".format(stream,field))
+          if ('raw' in request_obj) and request_obj['raw']:
+            self.logger.debug("Raw data requested.")
+            result, resultText = (0,self.dest.getRawStreamFieldData(stream,field,start,stop))
+          else:
+            result, resultText = self.dest.getStatStreamFieldData(stream,field,start,stop)
+        else:
+          self.logger.debug("Read request for stream `{}` recieved.".format(stream))
+          if ('raw' in request_obj) and request_obj['raw']:
+            self.logger.debug("Raw data requested.")
+            result, resultText = (0,self.dest.getRawStreamData(stream,start,stop))
+          else:
+            result, resultText = self.dest.getStatStreamData(stream,start,stop)
+      except:
+        print "Exception in user code:"
+        print '-'*60
+        traceback.print_exc(file=sys.stdout)
+        print '-'*60
+        result, resultText = (1, "Server error encountered")
+
+    finally:
+      returnMessage = (result,resultText)
+      read_stream.send(json.dumps(returnMessage))
+      
+
 def main():
   if not os.path.exists(fullVarPath):
     os.mkdir(fullVarPath)
@@ -221,9 +276,11 @@ def main():
   reg_addr = "tcp://*"
   data_addr = "tcp://*"
   alert_addr = "tcp://*"
+  read_addr = "tcp://*"
   reg_port = origin.config["origin_register_port"]
   data_port = origin.config["origin_measure_port"]
   alert_port = origin.config["origin_alert_port"]
+  read_port = origin.config["origin_read_port"]
   update_period = int(float(origin.config["alert_check_period"])*1e3)
 
   context = zmq.Context.instance()
@@ -236,6 +293,9 @@ def main():
   alert_socket = context.socket(zmq.REP)
   alert_socket.bind("%s:%s" % (alert_addr,alert_port))
 
+  read_socket = context.socket(zmq.REP)
+  read_socket.bind("%s:%s" % (read_addr,read_port))
+
   reg_stream = ZMQStream(reg_socket)
   reg_stream.on_recv_stream(mon.registerStream)
 
@@ -244,6 +304,9 @@ def main():
 
   alert_stream = ZMQStream(alert_socket)
   alert_stream.on_recv(mon.processAlertMsg)
+
+  read_stream = ZMQStream(read_socket)
+  read_stream.on_recv_stream(mon.processReadMsg)
 
   #Periodic check for monitoring alerts
   alerter = ioloop.PeriodicCallback(mon.CheckAlerts, update_period)
