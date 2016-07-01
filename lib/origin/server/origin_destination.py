@@ -152,10 +152,12 @@ class destination:
         try:
             stop = long(stop)*2**32
         except TypeError:
+            self.logger.debug("Using default stop time")
             stop = current_time(config)
         try:
             start = long(start)*2**32
         except TypeError:
+            self.logger.debug("Using default start time")
             start = stop - 5*60L*2**32 # 5 minute range default
         if start > stop:
             self.logger.info("Requested read range out of order. Swapping range.")

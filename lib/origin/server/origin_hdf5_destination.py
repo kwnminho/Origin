@@ -163,31 +163,34 @@ class hdf5_destination(destination):
         pointer = raw_data[timestamp]['pointer']+1
         array = raw_data[timestamp]['array']
 
-        raw_data[timestamp] = np.concatenate((array[pointer:],array[:pointer]))
-#        for i in range(len(raw_data[timestamp])-1):
-#            if(raw_data[timestamp][i+1]-raw_data[timestamp][i] < 0):
-#                print "order error detected at position: " + str(i)
-#                break
-        for field in definition:
-            field_pointer = raw_data[field]['pointer']+1
-            offset = field_pointer - pointer
-            array = raw_data[field]['array']
-            length = len(array)
-            if offset < 0:
-                self.logger.debug("negative offset")
-                offset += length
-            raw_data[field] = np.concatenate((
-                np.full(offset,None)
-                ,array[pointer+offset:]
-                ,array[:pointer+offset]
-            ))[:length]
-
         # check if the buffer has the requested range first, it usually will be
-        buff_start = raw_data[timestamp][0]
-        buff_stop = raw_data[timestamp][-1]
+        buff_start = array[pointer]
+        if pointer == 0:
+            buff_stop =  array[-1]
+        else:
+            buff_stop =  array[pointer-1]
+
         if buff_start > start: # if not go look for it
-            self.logger.debug("shouldn't be here")
-            raw_data = self.getArchivedStreamData(self,stream,start,stop,raw_data)
+            raw_data[timestamp] = array[:pointer] # data after pointer has already been saved to the archive
+            for field in definition:
+                raw_data[field] = raw_data[field]['array'][:pointer]
+            raw_data = self.getArchivedStreamData(stream_group,start,stop,raw_data,definition)
+        else:   # otherwise all requested data is contained in the buffer
+            raw_data[timestamp] = np.concatenate((array[pointer:],array[:pointer]))
+            for field in definition:
+                field_pointer = raw_data[field]['pointer']+1
+                offset = field_pointer - pointer
+                array = raw_data[field]['array']
+                length = len(array)
+                # in the ring buffer the oldest data could have been overwritten during the read
+                if offset < 0:  
+                    self.logger.debug("negative offset")
+                    offset += length
+                raw_data[field] = np.concatenate((
+                    np.full(offset,None)
+                    ,array[pointer+offset:]
+                    ,array[:pointer+offset]
+                ))[:length]
 
         # now filter the data down to the requested range
         idx_start = None
@@ -214,5 +217,27 @@ class hdf5_destination(destination):
         return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
 
     # get raw_data in range from the archived data
-    def getArchivedStreamData(self,stream,start,stop,buffer_data):
-        raise NotImplementedError
+    def getArchivedStreamData(self,stream_group,start,stop,buffer_data,definition):
+        time_dset = stream_group[timestamp]
+        row_pointer = stream_group.attrs['row_count']
+        old_data={}
+        # make as big as it needs to be then resize
+        old_data[timestamp] = np.zeros(row_pointer)
+        for field in definition:
+            old_data[field] = np.zeros(row_pointer) 
+        chunksize = config['hdf5_chunksize']
+        row_pointer -= chunksize
+        while row_pointer >= 0:
+            chunk = time_dset[row_pointer:row_pointer+chunksize]
+            if chunk[0] < stop:
+                old_data[timestamp][row_pointer:row_pointer+chunksize] = chunk
+                for field in definition:
+                    old_data[field][row_pointer:row_pointer+chunksize] = stream_group[field][row_pointer:row_pointer+chunksize]
+            if chunk[0] < start:
+                old_data[timestamp] = np.concatenate((old_data[timestamp][row_pointer:],buffer_data[timestamp]))
+                for field in definition:
+                    old_data[field] = np.concatenate((old_data[field][row_pointer:],buffer_data[field]))
+                break
+            row_pointer -= chunksize
+        return old_data
+        
