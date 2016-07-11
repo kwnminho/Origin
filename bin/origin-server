@@ -132,14 +132,14 @@ class MonServer(object):
         for idx, rawKey in enumerate(rawKeyList):
           for key in recordDict:
             if rawKey.find('"{}"'.format(key)) != -1:
-              keyOrder.append(key)
+              keyOrder.append(key.strip())
               break
       # otherwise try comma-separated format
       else:
         messageDecoded = msg.split(',')
         recordDict = {}
         for entry in messageDecoded[1:]:
-          key, dtype = entry.split(':')
+          key, dtype = [ x.strip() for x in entry.split(':')]
           recordDict[key] = dtype
           keyOrder.append(key)
   

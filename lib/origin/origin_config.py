@@ -29,7 +29,7 @@ configTest={
 }
 
 configSite={
-  "origin_server":"xxx.xxx.xxx.xxx",
+        "origin_server":"hexlabmonitor.physics.wisc.edu",
   "origin_register_port"    : "5556",
   "origin_measure_port"     : "5557", 
   "origin_alert_port"       : "5558",
@@ -46,6 +46,6 @@ configSite={
   "timestamp_type"  : "uint64",
   "data_path"       : os.path.join(var_path,"data"),
   "data_file"       : os.path.join(var_path,"data","origin.hdf5"),
-  "hdf5_chunksize"  : 2**10,
+  "hdf5_chunksize"  : 2**16,
   "hdf5_compression"  : 'gzip', # False for no compression
 }
