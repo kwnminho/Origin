@@ -4,7 +4,7 @@ from origin import data_types, current_time, config, timestamp
 
 import struct
 import numpy as np
-import sys, traceback
+import sys
 
 class destination:
     def __init__(self,logger):
@@ -121,13 +121,15 @@ class destination:
             streamData = self.getRawStreamData(stream,start,stop)
             data = {}
             for field in streamData:
-                avg = np.nanmean(streamData[field])
-                std = np.nanstd(streamData[field])
-                max = np.nanmax(streamData[field])
-                min = np.nanmin(streamData[field])
-                data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
+                if field != timestamp:
+                    avg = np.nanmean(streamData[field])
+                    std = np.nanstd(streamData[field])
+                    max = np.nanmax(streamData[field])
+                    min = np.nanmin(streamData[field])
+                    data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
         except:
+            self.logger.exception("Exception in server code:")
             result, resultText = (1,"Could not process request.")
         finally:
             return (result,resultText)
@@ -144,6 +146,7 @@ class destination:
         data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
       except:
+        self.logger.exception("Exception in server code:")
         result, resultText = (1,"Could not process request.")
       finally:
         return (result,resultText)
