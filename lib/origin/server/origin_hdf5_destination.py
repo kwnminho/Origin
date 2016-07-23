@@ -208,6 +208,7 @@ class hdf5_destination(destination):
             raise IndexError
         self.logger.debug((idx_start,idx_stop))
         data = {}
+        data[timestamp] = raw_data[timestamp][idx_start:idx_stop].tolist() # json method cant handle numpy array
         for field in definition:
             data[field] = raw_data[field][idx_start:idx_stop].tolist() # json method cant handle numpy array
         return data
