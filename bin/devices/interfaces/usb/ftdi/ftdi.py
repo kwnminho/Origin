@@ -47,15 +47,16 @@ class ftdi:
         return make_model
 
     #Get info about ftdi device on usb port
-    def get_info(self, port):
+    def get_info(self, port, baudrate):
+        #self.ftdi_query_device(port, 'BEEP\r\n')
         make_model = self.get_ftdi_make_model(port)
         #Switch to get info specific to device make and model
         if(make_model=='Arroyo_4205-DR'):
-            return Arroyo_4205_DR.get_info(port)
+            return Arroyo_4205_DR.get_info(port, baudrate)
         elif(make_model=='Arroyo_5235'):
-            return Arroyo_5235.get_info(port)
+            return Arroyo_5235.get_info(port, baudrate)
         elif(make_model=='Arroyo_5240'):
-            return Arroyo_5240.get_info(port)
+            return Arroyo_5240.get_info(port, baudrate)
         else:
-            print("Device make and model not recognized")
+            print("ftdi device make and model not recognized")
             return None

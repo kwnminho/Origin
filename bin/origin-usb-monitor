@@ -24,6 +24,10 @@ from origin.client import monitoring_record
 from origin.client import server
 from origin.client import server_connection
 from origin import current_time, timestamp
+#Create usb interface
+from devices import originIO
+io = originIO.originIO()
+
 
 # just a proxy for actually doing something useful
 def makeTempMeasurement():
@@ -34,13 +38,7 @@ def makeTempMeasurement():
 serv = server()
 
 
-# alert the server that we are going to be sending this type of data
-connection = serv.registerStream(
-    stream="toy",
-    records={
-        "toy1":"float",
-        "toy2":"float",
-        })
+
 
 # perhaps print some useful message. Perhaps try to reconnect....
 # print "problem establishing connection to server..."
@@ -48,12 +46,32 @@ connection = serv.registerStream(
 
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever
-time.sleep(5)
 
 while True:
     print "sending...."
-    t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
-    data = { timestamp: current_time(origin.config), "toy1": t1, "toy2": t2 }
-    connection.send(**data)
-    print("toy1: {}\ntoy2: {}".format(t1,t2))
-    time.sleep(0.01)
+    usb_device_info = io.get_all_devices_info()
+    print(len(usb_device_info))
+    for usb_device in usb_device_info:
+        print(usb_device)
+        brand = usb_device['brand']
+        type  = usb_device['type']
+        serial = usb_device['serial']
+
+        stream_name = brand+'_'+type+'_'+serial
+        # alert the server that we are going to be sending this type of data
+        connection = serv.registerStream(
+          stream=stream_name,
+          records={ 'set_point':'float',
+                    'sensor':'float',
+                    'V':'float',
+                    'I':'float'})
+        record = {
+        'set_point':float(usb_device['set_point']),
+        'sensor'   :float(usb_device['sensor']),
+        'V'        :float(usb_device['V']),
+        'I'        :float(usb_device['I'])
+        }
+        #time.sleep(1)
+        record['timestamp'] = current_time(origin.config)
+        connection.send(**record)
+    time.sleep(5)

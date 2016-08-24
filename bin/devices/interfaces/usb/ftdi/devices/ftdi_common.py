@@ -2,7 +2,7 @@ import serial
 class ftdi_common:
     def __init__(self):
         pass
-    def arroyo_query(self, port, query, baudrate=38400):
+    def arroyo_query(self, port, query, baudrate):
         ser = serial.Serial(port=port, baudrate=baudrate, timeout=1)
         #add \r\n to message to terminate it
         ser.write(query+'\r\n')
