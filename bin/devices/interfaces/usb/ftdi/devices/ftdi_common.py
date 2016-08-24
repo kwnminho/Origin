@@ -4,9 +4,11 @@ class ftdi_common:
         pass
     def arroyo_query(self, port, query, baudrate=38400):
         ser = serial.Serial(port=port, baudrate=baudrate, timeout=1)
-        ser.write(query)
+        #add \r\n to message to terminate it
+        ser.write(query+'\r\n')
         #First line returned is an echo of the query
         ser.readline()
-        #second line has the actual return message
-        data = ser.readline()
+        #second line has the actual return message, remove last two chars which
+        #are /r/n
+        data = ser.readline()[:-2]
         return data
