@@ -58,7 +58,16 @@ class MonServer(object):
     self._strlist = {}
     self.dest = hdf5_destination(logger)
     
-  def processSingleDataMsg(self,msg):
+  ## DATA HANDLER #######################################################
+  def processDataMsg(self,msg,format='native'):
+    for m in msg:
+      if m != '':
+        self.processSingleDataMsg(m,format)
+
+  def processJSONDataMsg(self,msg):
+      self.processDataMsg(msg, format='JSON')
+
+  def processSingleDataMsg(self,msg,format='native'):
     messageDecoded = None
     stream = None
     result = None
@@ -67,17 +76,19 @@ class MonServer(object):
     binaryData = False
 
     try:
-      try: # try json encoding first
+      if format=='native':
+        streamID = struct.unpack("!I",msg[:4])[0]
+        stream = self.dest.findStream(streamID)
+        data = msg[4:] # remove first 4 bytes
+        binaryData = True
+      elif format=='JSON':
         messageDecoded = json.loads(msg)
         stream = messageDecoded[0]
-      except ValueError:
-        try: # try binary encoding next
-          streamID = struct.unpack("!I",msg[:4])[0]
-          stream = self.dest.findStream(streamID)
-          data = msg[4:] # remove first 4 bytes
-          binaryData = True
-        except:
-          raise
+      else:
+        result = 1
+        resultText = "Unrecognized data format `{}` specified".format(format)
+        fail = True
+
     except:
       result = 1
       resultText = "Failed to decode message from client"
@@ -101,17 +112,16 @@ class MonServer(object):
 
     if result != 0:
       self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))
-    
-  def processDataMsg(self,msg):
-    for m in msg:
-      if m != '':
-        self.processSingleDataMsg(m)
       
-  def registerStream(self,reg_stream,msg):
+  ## REGISTRATION HANDLER ###############################################
+  def registerStream(self, reg_stream, msg, format='native'):
     for m in msg:
-      self.registerSingleStream(reg_stream,m)
+      self.registerSingleStream(reg_stream, m, format)
 
-  def registerSingleStream(self,reg_stream,msg):
+  def registerJSONStream(self, reg_stream, msg):
+      self.registerStream(reg_stream, msg, format='JSON')
+
+  def registerSingleStream(self,reg_stream,msg,format='native'):
     verb = None
     messageDecoded = None
     stream = None
@@ -122,8 +132,15 @@ class MonServer(object):
     keyOrder = []
 
     try:
-      # do a simple check for json formating first
-      if msg[0] == '[':
+      if format=='native':
+        messageDecoded = msg.split(',')
+        recordDict = {}
+        for entry in messageDecoded[1:]:
+          key, dtype = entry.split(':')
+          recordDict[key] = dtype
+          keyOrder.append(key)
+
+      elif format=='JSON':
         messageDecoded = json.loads(msg)
         recordDict = messageDecoded[1]
         rawKeyList = msg.split('{')[1]
@@ -134,14 +151,10 @@ class MonServer(object):
             if rawKey.find('"{}"'.format(key)) != -1:
               keyOrder.append(key)
               break
-      # otherwise try comma-separated format
       else:
-        messageDecoded = msg.split(',')
-        recordDict = {}
-        for entry in messageDecoded[1:]:
-          key, dtype = entry.split(':')
-          recordDict[key] = dtype
-          keyOrder.append(key)
+        result = 1
+        resultText = "Unrecognized registration format `{}` specified".format(format)
+        fail = True
   
     except:
       result = 1
@@ -159,6 +172,7 @@ class MonServer(object):
     returnMessage = (str(result),resultText)
     reg_stream.send(','.join(returnMessage))
 
+  ## ALERT HANDLER ######################################################
   def processAlertMsg(self,alert_stream,msg):
     #Placeholder for testing alert messages 
     try:
@@ -180,6 +194,7 @@ class MonServer(object):
     for l in list:
       d = l*l
        
+  ## READ REQUEST HANDLER ################################################
   def processReadMsg(self,read_stream,msg):
     for m in msg:
       if m != '':
@@ -270,39 +285,66 @@ def main():
   mon = MonServer(logger)
   
   reg_addr = "tcp://*"
-  data_addr = "tcp://*"
-  alert_addr = "tcp://*"
-  read_addr = "tcp://*"
   reg_port = origin.config["origin_register_port"]
+
+  data_addr = "tcp://*"
   data_port = origin.config["origin_measure_port"]
+
+  json_reg_addr = "tcp://*"
+  json_reg_port = origin.config["origin_json_register_port"]
+
+  json_data_addr = "tcp://*"
+  json_data_port = origin.config["origin_json_measure_port"]
+
+  alert_addr = "tcp://*"
   alert_port = origin.config["origin_alert_port"]
+
+  read_addr = "tcp://*"
   read_port = origin.config["origin_read_port"]
+
   update_period = int(float(origin.config["alert_check_period"])*1e3)
 
   context = zmq.Context.instance()
+  
+  # NATIVE FORMAT ######################################################
   reg_socket = context.socket(zmq.REP)
   reg_socket.bind("%s:%s" % (reg_addr,reg_port))
-
-  data_socket = context.socket(zmq.PULL)
-  data_socket.bind("%s:%s" % (data_addr,data_port))
-
-  alert_socket = context.socket(zmq.REP)
-  alert_socket.bind("%s:%s" % (alert_addr,alert_port))
-
-  read_socket = context.socket(zmq.REP)
-  read_socket.bind("%s:%s" % (read_addr,read_port))
 
   reg_stream = ZMQStream(reg_socket)
   reg_stream.on_recv_stream(mon.registerStream)
 
+  data_socket = context.socket(zmq.PULL)
+  data_socket.bind("%s:%s" % (data_addr,data_port))
+
   data_stream = ZMQStream(data_socket)
   data_stream.on_recv(mon.processDataMsg)
 
-  alert_stream = ZMQStream(alert_socket)
-  alert_stream.on_recv(mon.processAlertMsg)
+  # JSON FORMAT ########################################################
+  json_reg_socket = context.socket(zmq.REP)
+  json_reg_socket.bind("%s:%s" % (json_reg_addr,json_reg_port))
+
+  json_reg_stream = ZMQStream(json_reg_socket)
+  json_reg_stream.on_recv_stream(mon.registerJSONStream)
+
+  json_data_socket = context.socket(zmq.PULL)
+  json_data_socket.bind("%s:%s" % (json_data_addr,json_data_port))
+
+  json_data_stream = ZMQStream(json_data_socket)
+  json_data_stream.on_recv(mon.processJSONDataMsg)
+
+  # READ FORMAT ########################################################
+  read_socket = context.socket(zmq.REP)
+  read_socket.bind("%s:%s" % (read_addr,read_port))
 
   read_stream = ZMQStream(read_socket)
   read_stream.on_recv_stream(mon.processReadMsg)
+
+  # ALERT FORMAT ########################################################
+  alert_socket = context.socket(zmq.REP)
+  alert_socket.bind("%s:%s" % (alert_addr,alert_port))
+
+  alert_stream = ZMQStream(alert_socket)
+  alert_stream.on_recv(mon.processAlertMsg)
 
   #Periodic check for monitoring alerts
   alerter = ioloop.PeriodicCallback(mon.CheckAlerts, update_period)

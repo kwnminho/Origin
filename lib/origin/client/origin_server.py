@@ -92,6 +92,10 @@ class server:
             return None
 
         port = config["origin_register_port"]
+        msgport = config["origin_measure_port"]
+        if format=='json':
+            port = config["origin_json_register_port"]
+            msgport = config["origin_json_measure_port"]
 
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
@@ -123,6 +127,5 @@ class server:
  
         # error checking
         socket_data = context.socket(zmq.PUSH)
-        msgport = config["origin_measure_port"]
         socket_data.connect("tcp://%s:%s"%(host,msgport))
         return server_connection(stream,streamID,keyOrder,format,records,context,socket_data)
