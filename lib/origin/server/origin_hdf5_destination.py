@@ -7,19 +7,19 @@ import numpy as np
 
 class hdf5_destination(destination):
     def connect(self):
-        data_dir = config['data_path']
+        data_dir = config['hdf5_data_path']
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
-            self.logger.info("Creating data directory at: " + config['data_path'])
+            self.logger.info("Creating data directory at: " + config['hdf5_data_path'])
         try:
-            self.hdf5_file = h5py.File(config['data_file'], 'r+')
-            self.logger.info("Opened data file: {}".format(config['data_file']))
+            self.hdf5_file = h5py.File(config['hdf5_data_file'], 'r+')
+            self.logger.info("Opened data file: {}".format(config['hdf5_data_file']))
         except IOError:
             try:
-                self.hdf5_file = h5py.File(config['data_file'], 'w')
-                self.logger.info("New data file: {}".format(config['data_file']))
+                self.hdf5_file = h5py.File(config['hdf5_data_file'], 'w')
+                self.logger.info("New data file: {}".format(config['hdf5_data_file']))
             except IOError:
-                self.logger.error("Unable to create data file: " + config['data_file'])
+                self.logger.error("Unable to create data file: " + config['hdf5_data_file'])
 
 
     def readStreamDefTable(self):

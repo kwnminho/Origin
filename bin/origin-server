@@ -27,9 +27,6 @@ import zmq
 from zmq.eventloop import ioloop
 from zmq.eventloop.zmqstream import ZMQStream
 
-#from origin.server import mysql_destination
-from origin.server import hdf5_destination
-
 import json
 import struct
 
@@ -56,7 +53,26 @@ class MonServer(object):
     self.streamfile = ""
     self.state = "UNKNOWN"
     self._strlist = {}
-    self.dest = hdf5_destination(logger)
+
+    if config["origin_destination"] == 'mysql':
+        from origin.server import mysql_destination
+        self.dest = mysql_destination(logger)
+
+    elif config["origin_destination"] == 'hdf5':
+        from origin.server import hdf5_destination
+        self.dest = hdf5_destination(logger)
+
+    elif config["origin_destination"] == 'filesystem':
+        from origin.server import filesystem_destination
+        self.dest = filesystem_destination(logger)
+
+    elif config["origin_destination"] == '':
+        print "No destination specified in configs"
+        sys.exit(1)
+        
+    else:
+        print "Unrecognized destination `{}` specified".format(config["origin_destination"])
+        sys.exit(1)
     
   ## DATA HANDLER #######################################################
   def processDataMsg(self,msg,format='native'):
