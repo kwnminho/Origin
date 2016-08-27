@@ -8,10 +8,16 @@ print sys.argv[0]
 fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
 fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
 fullVarPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/var")
-print fullLibPath
+fullCfgPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/config")
 sys.path.append(fullLibPath)
 
 import origin
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+configfile = fullCfgPath + "/" + "origin-server.cfg"
+config.read(configfile)
+
 if len(sys.argv) > 1:
   configBundle = sys.argv[1]
   origin.configure(configBundle)
@@ -56,7 +62,7 @@ class MonServer(object):
     self.streamfile = ""
     self.state = "UNKNOWN"
     self._strlist = {}
-    self.dest = hdf5_destination(logger)
+    self.dest = hdf5_destination(logger,config)
     
   def processSingleDataMsg(self,msg):
     messageDecoded = None
@@ -273,10 +279,16 @@ def main():
   data_addr = "tcp://*"
   alert_addr = "tcp://*"
   read_addr = "tcp://*"
+
+  reg_port = config.get("Server","register_port")
+  data_port = config.get("Server","measure_port")
+  alert_port = config.get("Server","alert_port")
+  read_port = config.get("Server","read_port")
+  update_period = int(float(config.get("Server","alert_check_period"))*1e3)
+
   reg_port = origin.config["origin_register_port"]
   data_port = origin.config["origin_measure_port"]
   alert_port = origin.config["origin_alert_port"]
-  read_port = origin.config["origin_read_port"]
   update_period = int(float(origin.config["alert_check_period"])*1e3)
 
   context = zmq.Context.instance()

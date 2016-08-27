@@ -1,13 +1,13 @@
 import mysql.connector
 from origin.server import destination
-from origin import data_types, config, timestamp
+from origin import data_types, timestamp
 
-class mysql_destination(destination):
+class mysql_destination(destination,config):
     def connect(self):
-        self.cnx = mysql.connector.connect(user=config["mysql_local_user"],
-                                           password=config["mysql_local_password"],
-                                           host=config["mysql_local_server"],
-                                           database=config["mysql_local_db"])
+        self.cnx = mysql.connector.connect(user=config.get("MySQL","mysql_user"),
+                                           password=config.get("MySQL","mysql_password"),
+                                           host=config.get("MySQL","mysql_server_ip"),
+                                           database=config.get("MySQL","mysql_db"))
         self.cursor = self.cnx.cursor()
 
     def readStreamDefTable(self):
@@ -103,7 +103,7 @@ class mysql_destination(destination):
 
         query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,%s "%(stream,version, timestamp)
         try:
-            query += data_types[config["timestamp_type"]]["mysql"]
+            query += data_types[config.get("MySQL","timestamp_type")]
         except KeyError:
             query += "INT UNSIGNED"
         query += ","
