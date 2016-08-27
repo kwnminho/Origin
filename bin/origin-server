@@ -54,24 +54,24 @@ class MonServer(object):
     self.state = "UNKNOWN"
     self._strlist = {}
 
-    if config["origin_destination"] == 'mysql':
+    if origin.config["origin_destination"] == 'mysql':
         from origin.server import mysql_destination
         self.dest = mysql_destination(logger)
 
-    elif config["origin_destination"] == 'hdf5':
+    elif origin.config["origin_destination"] == 'hdf5':
         from origin.server import hdf5_destination
         self.dest = hdf5_destination(logger)
 
-    elif config["origin_destination"] == 'filesystem':
+    elif origin.config["origin_destination"] == 'filesystem':
         from origin.server import filesystem_destination
         self.dest = filesystem_destination(logger)
 
-    elif config["origin_destination"] == '':
+    elif origin.config["origin_destination"] == '':
         print "No destination specified in configs"
         sys.exit(1)
         
     else:
-        print "Unrecognized destination `{}` specified".format(config["origin_destination"])
+        print "Unrecognized destination `{}` specified".format(origin.config["origin_destination"])
         sys.exit(1)
     
   ## DATA HANDLER #######################################################

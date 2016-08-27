@@ -23,9 +23,10 @@ class filesystem_destination(destination):
 
     def readStreamDefTable(self):
         try:
-            with open(config["fs_info_file"], 'r') as json_data:
-                self.knownStreamVersions = json.load(json_data)
-        except KeyError:
+            with open(config["fs_info_file"], 'r') as f:
+                json_data = f.read()
+            self.knownStreamVersions = json.loads(json_data)
+        except IOError:
             self.logger.debug("Info file `{}` not found".format(config["fs_info_file"]))
             self.knownStreamVersions = {}
 
@@ -35,7 +36,8 @@ class filesystem_destination(destination):
             if stream in dir_list:
                 current_stream_version = getCurrentStreamVersion(stream)
                 with open(os.path.join(current_stream_version,'definition.json'), 'r') as f:
-                    self.knownStreams[stream] = json.load(json_data)
+                    json_data = f.read()
+                self.knownStreams[stream] = json.loads(json_data)
             else:
                 self.logger.error("Stream '{}' found in stream list, but is not a group")
 
@@ -47,7 +49,7 @@ class filesystem_destination(destination):
     def createNewStream(self,stream,version,template,keyOrder):
         stream_path = os.path.join(os.path.join(config['fs_data_path'],stream))
         if version == 1:    # create a new stream group under root
-            os.mkdir()
+            os.mkdir(stream_path)
             streamID = len(getDirectoryList(config['fs_data_path']))
         else:
             streamID = self.knownStreamVersions[stream]["id"]
@@ -84,7 +86,7 @@ class filesystem_destination(destination):
         current_stream_version = getCurrentStreamVersion(stream)
         for field in measurements:
             with open( os.path.join(current_stream_version, field), 'a' ) as f:
-                f.write(measurements[field] + '\n')
+                f.write( str(measurements[field]) + '\n')
 
     # read stream data from storage between the timestamps given by time = [start,stop]
     # only takes timestamps in seconds
