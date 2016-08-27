@@ -8,10 +8,16 @@ print sys.argv[0]
 fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
 fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
 fullVarPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/var")
-print fullLibPath
+fullCfgPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/config")
 sys.path.append(fullLibPath)
 
 import origin
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+configfile = fullCfgPath + "/" + "origin-server.cfg"
+config.read(configfile)
+
 if len(sys.argv) > 1:
   configBundle = sys.argv[1]
   origin.configure(configBundle)
@@ -54,24 +60,25 @@ class MonServer(object):
     self.state = "UNKNOWN"
     self._strlist = {}
 
-    if origin.config["origin_destination"] == 'mysql':
+    dest = config.get("Server","destiniation")
+    if  dest == 'mysql':
         from origin.server import mysql_destination
         self.dest = mysql_destination(logger)
 
-    elif origin.config["origin_destination"] == 'hdf5':
+    elif dest == 'hdf5':
         from origin.server import hdf5_destination
         self.dest = hdf5_destination(logger)
 
-    elif origin.config["origin_destination"] == 'filesystem':
+    elif dest == 'filesystem':
         from origin.server import filesystem_destination
         self.dest = filesystem_destination(logger)
 
-    elif origin.config["origin_destination"] == '':
+    elif dest == '':
         print "No destination specified in configs"
         sys.exit(1)
         
     else:
-        print "Unrecognized destination `{}` specified".format(origin.config["origin_destination"])
+        print "Unrecognized destination `{}` specified".format(dest)
         sys.exit(1)
     
   ## DATA HANDLER #######################################################
@@ -165,7 +172,7 @@ class MonServer(object):
         for idx, rawKey in enumerate(rawKeyList):
           for key in recordDict:
             if rawKey.find('"{}"'.format(key)) != -1:
-              keyOrder.append(key)
+              keyOrder.append(key.strip())
               break
       else:
         result = 1
@@ -301,24 +308,24 @@ def main():
   mon = MonServer(logger)
   
   reg_addr = "tcp://*"
-  reg_port = origin.config["origin_register_port"]
+  reg_port = config.get("Server","register_port")
 
   data_addr = "tcp://*"
-  data_port = origin.config["origin_measure_port"]
+  data_port = config.get("Server","measure_port")
 
   json_reg_addr = "tcp://*"
-  json_reg_port = origin.config["origin_json_register_port"]
+  json_reg_port = config.get("Server","json_register_port")
 
   json_data_addr = "tcp://*"
-  json_data_port = origin.config["origin_json_measure_port"]
+  json_data_port = config.get("Server","json_measure_port")
 
   alert_addr = "tcp://*"
-  alert_port = origin.config["origin_alert_port"]
+  alert_port = config.get("Server","alert_port")
 
   read_addr = "tcp://*"
-  read_port = origin.config["origin_read_port"]
+  read_port = config.get("Server","read_port")
 
-  update_period = int(float(origin.config["alert_check_period"])*1e3)
+  update_period = int(float(config.get("Server","alert_check_period"))*1e3)
 
   context = zmq.Context.instance()
   
