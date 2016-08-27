@@ -1,8 +1,9 @@
 import mysql.connector
 from origin.server import destination
 from origin import data_types, timestamp
+import ConfigParser
 
-class mysql_destination(destination,config):
+class mysql_destination(destination):
     def connect(self):
         self.cnx = mysql.connector.connect(user=config.get("MySQL","mysql_user"),
                                            password=config.get("MySQL","mysql_password"),

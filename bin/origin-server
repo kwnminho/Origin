@@ -54,31 +54,32 @@ http://learning-0mq-with-pyzmq.readthedocs.org/en/latest/pyzmq/multisocket/torna
 """
 
 class MonServer(object):
-  def __init__(self,logger):
+  def __init__(self,logger,config):
     self.logger = logger
     self.streamfile = ""
     self.state = "UNKNOWN"
     self._strlist = {}
 
-    dest = config.get("Server","destiniation")
-    if  dest == 'mysql':
+    dest = config.get("Server","destiniation").lower()
+    print type(dest)
+    if  dest == "mysql":
         from origin.server import mysql_destination
-        self.dest = mysql_destination(logger)
+        self.dest = mysql_destination(logger,config)
 
-    elif dest == 'hdf5':
+    elif "hdf5" in dest:
         from origin.server import hdf5_destination
-        self.dest = hdf5_destination(logger)
+        self.dest = hdf5_destination(logger,config)
 
-    elif dest == 'filesystem':
+    elif dest == "filesystem":
         from origin.server import filesystem_destination
-        self.dest = filesystem_destination(logger)
+        self.dest = filesystem_destination(logger,config)
 
     elif dest == '':
         print "No destination specified in configs"
         sys.exit(1)
         
     else:
-        print "Unrecognized destination `{}` specified".format(dest)
+        print "Unrecognized destination %s specified"%(dest)
         sys.exit(1)
     
   ## DATA HANDLER #######################################################
@@ -305,7 +306,7 @@ def main():
   logger.info("Successfully Started Logging")
 
   # Setup Server
-  mon = MonServer(logger)
+  mon = MonServer(logger,config)
   
   reg_addr = "tcp://*"
   reg_port = config.get("Server","register_port")

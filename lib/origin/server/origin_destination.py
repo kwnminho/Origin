@@ -7,7 +7,7 @@ import numpy as np
 import sys
 
 class destination:
-    def __init__(self,logger,conf):
+    def __init__(self,logger,config):
         self.logger = logger
         self.connect()
         self.readStreamDefTable()
