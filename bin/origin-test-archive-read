@@ -2,21 +2,22 @@
 
 import sys
 import os
-fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
-fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
+fullBinPath  = os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
+fullLibPath  = os.path.join(fullBasePath, "/lib")
+fullCfgPath  = os.path.join(fullBasePath, "/config")
 sys.path.append(fullLibPath)
+
 import time
 import zmq
 import json
 
-import origin
-if len(sys.argv) > 1:
-  configBundle = sys.argv[1]
-  origin.configure(configBundle)
-else:
-  origin.configure("site")
+from origin import current_time, timestamp
 
-from origin import current_time, timestamp, config
+import ConfigParser
+config = ConfigParser.ConfigParser()
+configfile = os.path.join(fullCfgPath, "origin-server-test.cfg")
+config.read(configfile)
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)

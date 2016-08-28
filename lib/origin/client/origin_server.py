@@ -5,8 +5,6 @@ from origin.client import integer_field
 from origin.client import string_field
 from origin import data_types
 
-from origin import config
-
 import zmq
 import sys
 import string
@@ -78,8 +76,8 @@ def validateStreamDeclaration(stream,template):
     return 1
 
 class server:
-    def __init__(self):
-        pass
+    def __init__(self, config):
+        self.config = config
 
     def ping(self):
         return True
@@ -91,15 +89,15 @@ class server:
             print "invalid stream declaration"
             return None
 
-        port = config["origin_register_port"]
-        msgport = config["origin_measure_port"]
+        port = self.config.get('Server',"register_port")
+        msgport = self.config.get('Server',"measure_port")
         if format=='json':
-            port = config["origin_json_register_port"]
-            msgport = config["origin_json_measure_port"]
+            port = self.config.get('Server',"json_register_port")
+            msgport = self.config.get('Server',"json_measure_port")
 
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
-        host=config["origin_server"]
+        host = self.config.get('Server',"ip")
         socket.connect ("tcp://%s:%s" % (host,port))
 
         if (keyOrder is None) and (format is None):
@@ -128,4 +126,4 @@ class server:
         # error checking
         socket_data = context.socket(zmq.PUSH)
         socket_data.connect("tcp://%s:%s"%(host,msgport))
-        return server_connection(stream,streamID,keyOrder,format,records,context,socket_data)
+        return server_connection(self.config,stream,streamID,keyOrder,format,records,context,socket_data)

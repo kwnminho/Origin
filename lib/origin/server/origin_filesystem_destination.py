@@ -1,40 +1,40 @@
 import json
 from origin.server import destination
-from origin import data_types, config, timestamp
+from origin import data_types, timestamp
 import os
 import numpy as np
 
 def getDirectoryList(dir):
     return [ d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir,d)) ]
 
-def getCurrentStreamVersion(stream):
-    stream_path = os.path.join(config['fs_data_path'],stream)
+def getCurrentStreamVersion(config,stream):
+    stream_path = os.path.join(config.get('FileSystem','data_path'),stream)
     with open(os.path.join(stream_path,'currentVersion.txt'), 'r') as f:
         version_dir = f.read().strip()
     return os.path.join(stream_path,version_dir)
 
 class filesystem_destination(destination):
     def connect(self):
-        data_dir = config['fs_data_path']
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-            self.logger.info("Creating data directory at: " + config['fs_data_path'])
-
+        self.data_path = self.config.get('FileSystem','data_path')
+        self.info_file = os.path.join( self.data_path, self.config.get('FileSystem','info_file') )
+        if not os.path.exists(self.data_path):
+            os.makedirs(self.data_path)
+            self.logger.info("Creating data directory at: " + self.data_path)
 
     def readStreamDefTable(self):
         try:
-            with open(config["fs_info_file"], 'r') as f:
+            with open(self.info_file, 'r') as f:
                 json_data = f.read()
             self.knownStreamVersions = json.loads(json_data)
         except IOError:
-            self.logger.debug("Info file `{}` not found".format(config["fs_info_file"]))
+            self.logger.debug("Info file `{}` not found".format(self.info_file))
             self.knownStreamVersions = {}
 
         self.knownStreams = {}
-        dir_list = getDirectoryList(config['fs_data_path'])
+        dir_list = getDirectoryList(self.data_path)
         for stream in self.knownStreamVersions:
             if stream in dir_list:
-                current_stream_version = getCurrentStreamVersion(stream)
+                current_stream_version = getCurrentStreamVersion(self.config,stream)
                 with open(os.path.join(current_stream_version,'definition.json'), 'r') as f:
                     json_data = f.read()
                 self.knownStreams[stream] = json.loads(json_data)
@@ -47,10 +47,10 @@ class filesystem_destination(destination):
                 print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name])
 
     def createNewStream(self,stream,version,template,keyOrder):
-        stream_path = os.path.join(os.path.join(config['fs_data_path'],stream))
+        stream_path = os.path.join(os.path.join(self.data_path,stream))
         if version == 1:    # create a new stream group under root
             os.mkdir(stream_path)
-            streamID = len(getDirectoryList(config['fs_data_path']))
+            streamID = len(getDirectoryList(self.data_path))
         else:
             streamID = self.knownStreamVersions[stream]["id"]
         # create a new subgroup for this instance of the current stream
@@ -72,7 +72,7 @@ class filesystem_destination(destination):
                 "keyOrder"  : keyOrder,
                 "formatStr" : self.formatString(template,keyOrder),
         }
-        with open(config["fs_info_file"], 'w') as json_data:
+        with open(self.info_file, 'w') as json_data:
             json_data.write(json.dumps(self.knownStreamVersions))
         # create the stream field definition dict
         definition = {}
@@ -83,7 +83,7 @@ class filesystem_destination(destination):
         return streamID
 
     def insertMeasurement(self,stream,measurements):
-        current_stream_version = getCurrentStreamVersion(stream)
+        current_stream_version = getCurrentStreamVersion(self.config,stream)
         for field in measurements:
             with open( os.path.join(current_stream_version, field), 'a' ) as f:
                 f.write( str(measurements[field]) + '\n')
@@ -94,7 +94,7 @@ class filesystem_destination(destination):
         start, stop = self.validateTimeRange(start,stop)
         self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
         # get data from buffer
-        current_stream_version = getCurrentStreamVersion(stream)
+        current_stream_version = getCurrentStreamVersion(self.config,stream)
         if definition is None:
             definition = self.knownStreams[stream]
 

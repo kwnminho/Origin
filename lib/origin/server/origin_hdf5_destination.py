@@ -1,25 +1,30 @@
 import h5py
 import json
 from origin.server import destination
-from origin import data_types, config, timestamp
+from origin import data_types, timestamp
 import os
 import numpy as np
 
 class hdf5_destination(destination):
     def connect(self):
-        data_dir = config['hdf5_data_path']
+        data_dir = self.config.get('HDF5','data_path')
+        if not os.path.exists( data_dir ):
+            data_dir = os.path.join(self.config.get("Server",'var_path'), data_dir)
+
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
-            self.logger.info("Creating data directory at: " + config['hdf5_data_path'])
+            self.logger.info("Creating data directory at: " + self.config.get('HDF5','data_path'))
+
+        f = os.path.join( data_dir, self.config.get('HDF5','data_file') )
         try:
-            self.hdf5_file = h5py.File(config['hdf5_data_file'], 'r+')
-            self.logger.info("Opened data file: {}".format(config['hdf5_data_file']))
+            self.hdf5_file = h5py.File(f, 'r+')
+            self.logger.info("Opened data file: {}".format(f))
         except IOError:
             try:
-                self.hdf5_file = h5py.File(config['hdf5_data_file'], 'w')
-                self.logger.info("New data file: {}".format(config['hdf5_data_file']))
+                self.hdf5_file = h5py.File(f, 'w')
+                self.logger.info("New data file: {}".format(f))
             except IOError:
-                self.logger.error("Unable to create data file: " + config['hdf5_data_file'])
+                self.logger.error("Unable to create data file: {}".format(f))
 
 
     def readStreamDefTable(self):
@@ -59,22 +64,24 @@ class hdf5_destination(destination):
 
         # data sets for each field plus the timestamp
         # also make a buffer dataset for each field a as a pseudo circular buffer
-        chunksize=(config['hdf5_chunksize'],) 
-        buff_size = (config['hdf5_chunksize'],)
+        chunksize=(self.config.getint('HDF5','chunksize'),) 
+        buff_size = chunksize
         print buff_size
+        tstype = self.config.get('Server','timestamp_type')
+        compression = self.config.get('HDF5','compression')
         stream_ver.create_dataset(
                 timestamp
                 , chunksize
                 , maxshape = (None,)
-                , dtype=data_types[config['timestamp_type']]['numpy']
+                , dtype=data_types[tstype]['numpy']
                 , chunks=chunksize
-                , compression=config['hdf5_compression']
+                , compression=compression
         )
         stream_ver.create_dataset(
                 timestamp + "_buffer"
                 , buff_size
                 , maxshape = buff_size
-                , dtype=data_types[config['timestamp_type']]['numpy']
+                , dtype=data_types[tstype]['numpy']
                 , chunks=chunksize
         )
         for field in template:
@@ -84,7 +91,7 @@ class hdf5_destination(destination):
                     , maxshape = (None,)
                     , dtype=data_types[template[field]]['numpy']
                     , chunks=chunksize
-                    , compression=config['hdf5_compression']
+                    , compression=compression
             )
             stream_ver.create_dataset(
                     field + "_buffer"
@@ -118,10 +125,10 @@ class hdf5_destination(destination):
             if (row_count_buffer == buffer_size):
                 self.logger.debug("Buffer is full. Moving completed chunk to archive and wrapping pointer around.")
                 length = dgroup[timestamp].shape[0]
-                chunksize=config['hdf5_chunksize'] 
+                chunksize=self.config.getint('HDF5','chunksize')
                 for field in measurements:
                     dgroup[field][row_count:] = dgroup[field+'_buffer']
-                    dgroup[field].resize((length+config['hdf5_chunksize'],))
+                    dgroup[field].resize((length+chunksize,))
                 row_count += buffer_size
                 row_count_buffer = 0
         else:
@@ -226,7 +233,7 @@ class hdf5_destination(destination):
         old_data[timestamp] = np.zeros(row_pointer)
         for field in definition:
             old_data[field] = np.zeros(row_pointer) 
-        chunksize = config['hdf5_chunksize']
+        chunksize = self.config.getint('HDF5','chunksize')
         row_pointer -= chunksize
         while row_pointer >= 0:
             chunk = time_dset[row_pointer:row_pointer+chunksize]

@@ -2,37 +2,30 @@
 
 import sys
 import os
-fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
-fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
-sys.path.append(fullLibPath)
-import time
-
 import random
-import calendar
 import time
-import sys
 
-import origin
-if len(sys.argv) > 1:
-  configBundle = sys.argv[1]
-  origin.configure(configBundle)
-else:
-  origin.configure("site")
+# first find ourself
+fullBinPath  = os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
+fullLibPath  = os.path.join(fullBasePath, "lib")
+fullCfgPath  = os.path.join(fullBasePath, "config")
+sys.path.append(fullLibPath)
 
-
-from origin.client import monitoring_record
-from origin.client import server
-from origin.client import server_connection
+from origin.client import server, random_data
 from origin import current_time, timestamp
 
-# just a proxy for actually doing something useful
-def makeTempMeasurement():
-    return random.random()
+if len(sys.argv) > 1:
+  configfile = os.path.join(fullCfgPath, sys.argv[1])
+else:
+  configfile = os.path.join(fullCfgPath, "origin-server.cfg")
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+config.read(configfile)
 
 # something that represents the connection to the server
-# might need arguments.... idk
-serv = server()
-
+serv = server(config)
 
 # alert the server that we are going to be sending this type of data
 connection = serv.registerStream(
@@ -42,17 +35,16 @@ connection = serv.registerStream(
         "toy2":"float",
         })
 
-# perhaps print some useful message. Perhaps try to reconnect....
-# print "problem establishing connection to server..."
-# sys.exit(1)
-
+# just a proxy for actually doing something useful
+def makeTempMeasurement():
+    return random.random()
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever    
 time.sleep(2)
 for i in range(3):
     print "sending...."
     t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
-    data = { timestamp: current_time(origin.config), "toy1": t1, "toy2": t2 }
+    data = { timestamp: current_time(config), "toy1": t1, "toy2": t2 }
     connection.send(**data)
     print("toy1: {}\ntoy2: {}".format(t1,t2))
     time.sleep(1)
@@ -71,7 +63,7 @@ for i in range(3):
     print "sending...."
     t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
     data = { 
-            timestamp: current_time(origin.config), 
+            timestamp: current_time(config), 
             "toy1": t1, 
             "toy2": t2,
             "toy3": t2 

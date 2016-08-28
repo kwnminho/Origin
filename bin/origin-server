@@ -1,28 +1,28 @@
 #!/usr/bin/env python
 
-
 import sys, traceback
 import os
 print os.getcwd()
 print sys.argv[0]
-fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
-fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
-fullVarPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/var")
-fullCfgPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/config")
+fullBinPath  = os.path.abspath(os.path.join(os.getcwd(), sys.argv[0]))
+fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
+fullLibPath  = os.path.join(fullBasePath, "lib")
+fullVarPath  = os.path.join(fullBasePath, "var")
+fullCfgPath  = os.path.join(fullBasePath, "config")
 sys.path.append(fullLibPath)
 
 import origin
+if len(sys.argv) > 1:
+  configfile = os.path.join(fullCfgPath, sys.argv[1])
+else:
+  configfile = os.path.join(fullCfgPath, "origin-server.cfg")
 
 import ConfigParser
 config = ConfigParser.ConfigParser()
-configfile = fullCfgPath + "/" + "origin-server.cfg"
 config.read(configfile)
-
-if len(sys.argv) > 1:
-  configBundle = sys.argv[1]
-  origin.configure(configBundle)
-else:
-  origin.configure("site")
+# add base path to config object since we wont know it until we run
+config.set('Server','base_path', fullBasePath) 
+config.set('Server','var_path',  fullVarPath)
 
 import argparse
 import time
@@ -61,12 +61,11 @@ class MonServer(object):
     self._strlist = {}
 
     dest = config.get("Server","destiniation").lower()
-    print type(dest)
     if  dest == "mysql":
         from origin.server import mysql_destination
         self.dest = mysql_destination(logger,config)
 
-    elif "hdf5" in dest:
+    elif dest == "hdf5":
         from origin.server import hdf5_destination
         self.dest = hdf5_destination(logger,config)
 
@@ -309,24 +308,24 @@ def main():
   mon = MonServer(logger,config)
   
   reg_addr = "tcp://*"
-  reg_port = config.get("Server","register_port")
+  reg_port = config.getint("Server","register_port")
 
   data_addr = "tcp://*"
-  data_port = config.get("Server","measure_port")
+  data_port = config.getint("Server","measure_port")
 
   json_reg_addr = "tcp://*"
-  json_reg_port = config.get("Server","json_register_port")
+  json_reg_port = config.getint("Server","json_register_port")
 
   json_data_addr = "tcp://*"
-  json_data_port = config.get("Server","json_measure_port")
+  json_data_port = config.getint("Server","json_measure_port")
 
   alert_addr = "tcp://*"
-  alert_port = config.get("Server","alert_port")
+  alert_port = config.getint("Server","alert_port")
 
   read_addr = "tcp://*"
-  read_port = config.get("Server","read_port")
+  read_port = config.getint("Server","read_port")
 
-  update_period = int(float(config.get("Server","alert_check_period"))*1e3)
+  update_period = config.getint("Server","alert_check_period")*1e3
 
   context = zmq.Context.instance()
   
