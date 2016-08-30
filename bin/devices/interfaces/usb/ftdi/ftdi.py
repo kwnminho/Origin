@@ -5,6 +5,8 @@ from devices.Arroyo_4205_DR import Arroyo_4205_DR
 Arroyo_4205_DR = Arroyo_4205_DR()
 from devices.Arroyo_5235 import Arroyo_5235
 Arroyo_5235 = Arroyo_5235()
+from devices.Arroyo_4304 import Arroyo_4304
+Arroyo_4304 = Arroyo_4304()
 from devices.Arroyo_5240 import Arroyo_5240
 Arroyo_5240 = Arroyo_5240()
 
@@ -13,16 +15,20 @@ class ftdi:
         pass
     #determines if usb device suppports ftdi protocol
     def is_ftdi(self, usb_device_id):
-        id_parts = usb_device_id.split('+')
-        if(len(id_parts)!=3):
+        # the formatting of the device id seems to change between versions of windows
+        # this has some obvious failure modes, but I dont care right now
+        if( usb_device_id.find('0403') < 0 ):
             return False
-        vendor_id  = id_parts[0]
-        product_id = id_parts[1]
-        if(vendor_id=='FTDIBUS\VID_0403' and product_id=='PID_6001'):
-            return True
         else:
+            vendor_id = '0403'
+        if( usb_device_id.find('6001') < 0 ):
             return False
-
+        else:
+            vendor_id = '6001'
+        if( usb_device_id.find('SER=') >= 0 ):
+            print(usb_device_id.split('SER=')[1])
+        return True
+        
     #query ftdi device
     def ftdi_query_device(self, port, query):
         ser = serial.Serial(port=port, baudrate=38400, timeout=1)
@@ -40,6 +46,7 @@ class ftdi:
     #Get just make and model of the device
     def get_ftdi_make_model(self, port):
         id_str = self.get_ftdi_id_string(port)
+        print(id_str)
         split_id = id_str.split(' ')
         make = split_id[0]
         model = split_id[1]
@@ -53,6 +60,8 @@ class ftdi:
         #Switch to get info specific to device make and model
         if(make_model=='Arroyo_4205-DR'):
             return Arroyo_4205_DR.get_info(port, baudrate)
+        elif(make_model=='Arroyo_4304'):
+            return Arroyo_4304.get_info(port, baudrate)
         elif(make_model=='Arroyo_5235'):
             return Arroyo_5235.get_info(port, baudrate)
         elif(make_model=='Arroyo_5240'):

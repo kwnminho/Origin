@@ -50,17 +50,21 @@ serv = server()
 while True:
     print "sending...."
     usb_device_info = io.get_all_devices_info()
+    print("Number of detected devices: ")
     print(len(usb_device_info))
     for usb_device in usb_device_info:
-        print(usb_device)
+        #print(usb_device)
         brand = usb_device['brand']
         type  = usb_device['type']
         serial = usb_device['serial']
-
-        stream_name = brand+'_'+type+'_'+serial
-        # alert the server that we are going to be sending this type of data
+        stream_name = usb_device['name']
+        if stream_name == '':
+            stream_name = brand+'_'+type+'_'+serial
+            
+        print(stream_name)
+        # this should be changed to not reregister everytime
         connection = serv.registerStream(
-          stream=stream_name,
+          stream=stream_name.encode("ascii"),
           records={ 'set_point':'float',
                     'sensor':'float',
                     'V':'float',
@@ -74,4 +78,4 @@ while True:
         #time.sleep(1)
         record['timestamp'] = current_time(origin.config)
         connection.send(**record)
-    time.sleep(5)
+    time.sleep(60*10)

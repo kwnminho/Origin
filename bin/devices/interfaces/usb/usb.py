@@ -24,10 +24,10 @@ class usb:
                     serial_port = device[0]
                     device_id   = device[2]
                     device_baud_rate = device_map["baud"]
-                    print(device_baud_rate)
+                    print("Using baud rate: {}".format(device_baud_rate))
                     if(ftdi.is_ftdi(device_id)):
-                        #baud rate could be passed in here
                         device_info = ftdi.get_info(serial_port, device_baud_rate)
+                        device_info['name'] = device_map['name']
                         all_info.append(device_info)
                     else:
                         print("usb device is using a protocol not yet supported")
@@ -37,7 +37,7 @@ class usb:
     #be used for that device
     def update_mapping(self, usb_devices):
         currently_known_devices = []
-        with open(os.path.join(here + "/usb_mappings.txt")) as f:
+        with open(os.path.join(here, "usb_mappings.txt"), 'r') as f:
             currently_known_devices = json.loads(f.read())
         #If usb device has never been seen before, add it to the mapping file
         for device in usb_devices:
@@ -53,7 +53,7 @@ class usb:
                 print("new usb device found: " + device_id)
                 currently_known_devices.append(new_device)
 
-        text_file = open(os.path.join(here + "/usb_mappings.txt"), "w")
+        text_file = open(os.path.join(here, "usb_mappings.txt"), "w")
         text_file.write(json.dumps(currently_known_devices))
         text_file.close()
         return currently_known_devices
