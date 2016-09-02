@@ -124,7 +124,11 @@ class destination:
             streamData = self.getRawStreamData(stream,start,stop)
             data = {}
             for field in streamData:
-                if field != timestamp:
+                if field == timestamp:
+                    data[field] = {'start': streamData[field][0], 'stop': streamData[field][1]}
+                elif self.knownStreams[stream][field]['type'] == 'string':
+                    data[field] = streamData[field] # TODO: figure out how to handle this
+                else:
                     avg = np.nanmean(streamData[field])
                     std = np.nanstd(streamData[field])
                     max = np.nanmax(streamData[field])
@@ -142,11 +146,14 @@ class destination:
       try:
         fieldData = self.getRawStreamFieldData(stream,field,start,stop)
         data = {}
-        avg = np.nanmean(fieldData[field])
-        std = np.nanstd(fieldData[field])
-        max = np.nanmax(fieldData[field])
-        min = np.nanmin(fieldData[field])
-        data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
+        if self.knownStreams[stream][field]['type'] == 'string':
+            data[field] = fieldData[field] # TODO: figure out how to handle this
+        else:
+            avg = np.nanmean(fieldData[field])
+            std = np.nanstd(fieldData[field])
+            max = np.nanmax(fieldData[field])
+            min = np.nanmin(fieldData[field])
+            data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
       except:
         self.logger.exception("Exception in server code:")
