@@ -58,6 +58,10 @@ class hdf5_destination(destination):
         # create a new subgroup for this instance of the current stream
         stream_ver = stream_group.create_group( stream + '_' + str(version) )
 
+        err, formatStr = self.formatString(template,keyOrder)
+        if err > 0:
+            formatStr = ''
+
         # soft link is not working?
         stream_group.attrs['currentVersion'] = stream_ver.name
         # stream_group['currentVersion'] = h5py.SoftLink(stream_ver)
@@ -66,7 +70,7 @@ class hdf5_destination(destination):
         # also make a buffer dataset for each field a as a pseudo circular buffer
         chunksize=(self.config.getint('HDF5','chunksize'),) 
         buff_size = chunksize
-        print buff_size
+        #print buff_size
         tstype = self.config.get('Server','timestamp_type')
         compression = self.config.get('HDF5','compression')
         stream_ver.create_dataset(
@@ -106,7 +110,7 @@ class hdf5_destination(destination):
                 "version"   : version,
                 "id"        : streamID,
                 "keyOrder"  : keyOrder,
-                "formatStr" : self.formatString(template,keyOrder),
+                "formatStr" : formatStr
         }
         self.hdf5_file.attrs['knownStreamVersions'] = json.dumps(self.knownStreamVersions)
         # create the stream field definition dict
@@ -142,6 +146,8 @@ class hdf5_destination(destination):
 
         #self.logger.debug("Datasets `{}.*` shape: {}".format(stream,dgroup[timestamp].shape))
         for field in measurements:
+            if (field != timestamp) and (self.knownStreams[stream][field]['type'] == "string"):
+                measurements[field] = measurements[field].encode("ascii","ignore")
             dgroup[field+"_buffer"][row_count_buffer] = measurements[field]
 
     # read stream data from storage between the timestamps given by time = [start,stop]

@@ -42,7 +42,7 @@ class destination:
               return (1,"Unsupported type '{}' in binary data.".format(dtype))
           except KeyError:
             return (1,"Type \"{}\" not recognized.".format(dtype))
-        return formatStr
+        return (0, formatStr)
 
     # returns version and streamID
     def registerStream(self,stream,template,keyOrder=None):

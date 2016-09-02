@@ -9,11 +9,15 @@ fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
 fullLibPath  = os.path.join(fullBasePath, "lib")
 fullVarPath  = os.path.join(fullBasePath, "var")
 fullCfgPath  = os.path.join(fullBasePath, "config")
+print fullLibPath
 sys.path.append(fullLibPath)
 
 import origin
 if len(sys.argv) > 1:
-  configfile = os.path.join(fullCfgPath, sys.argv[1])
+  if sys.argv[1] == 'test':
+    configfile = os.path.join(fullCfgPath, "origin-server-test.cfg")
+  else:
+    configfile = os.path.join(fullCfgPath, sys.argv[1])
 else:
   configfile = os.path.join(fullCfgPath, "origin-server.cfg")
 

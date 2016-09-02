@@ -5,10 +5,10 @@ import ConfigParser
 
 class mysql_destination(destination):
     def connect(self):
-        self.cnx = mysql.connector.connect(user=config.get("MySQL","mysql_user"),
-                                           password=config.get("MySQL","mysql_password"),
-                                           host=config.get("MySQL","mysql_server_ip"),
-                                           database=config.get("MySQL","mysql_db"))
+        self.cnx = mysql.connector.connect(user=self.config.get("MySQL","user"),
+                                           password=self.config.get("MySQL","password"),
+                                           host=self.config.get("MySQL","server_ip"),
+                                           database=self.config.get("MySQL","db"))
         self.cursor = self.cnx.cursor()
 
     def readStreamDefTable(self):
@@ -44,6 +44,7 @@ class mysql_destination(destination):
 
         currentStreamNameDefinitions = {}
         currentStreamVersions = {}
+
         for id,name,version in currentStreamNamesVersions:
             query = "SELECT field_name,field_type,keyIndex FROM origin_stream_fields WHERE stream_name=\"%s\" and version=%d"%(name,version)
             cursor.execute(query)
@@ -57,11 +58,16 @@ class mysql_destination(destination):
             for key in definition:
                 keyOrder[definition[key]["keyIndex"]] = key
                 template[key] = definition[key]["type"]
+
+            err, formatStr = self.formatString(template,keyOrder)
+            if err > 0:
+                formatStr = ''
+
             currentStreamVersions[name] = {
                     "version": version, 
                     "id": id, 
                     "keyOrder": keyOrder, 
-                    "formatStr": self.formatString(template,keyOrder)
+                    "formatStr": formatStr
             }
             
         for stream in currentStreamNameDefinitions.keys():
@@ -104,7 +110,7 @@ class mysql_destination(destination):
 
         query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,%s "%(stream,version, timestamp)
         try:
-            query += data_types[config.get("MySQL","timestamp_type")]
+            query += data_types[self.config.get("Server","timestamp_type")]["mysql"]
         except KeyError:
             query += "INT UNSIGNED"
         query += ","

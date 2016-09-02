@@ -8,7 +8,8 @@ def getDirectoryList(dir):
     return [ d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir,d)) ]
 
 def getCurrentStreamVersion(config,stream):
-    stream_path = os.path.join(config.get('FileSystem','data_path'),stream)
+    stream_path = config.get('FileSystem','data_path')
+    stream_path = os.path.join( config.get('Server', "var_path"), stream_path, stream )
     with open(os.path.join(stream_path,'currentVersion.txt'), 'r') as f:
         version_dir = f.read().strip()
     return os.path.join(stream_path,version_dir)
@@ -16,6 +17,7 @@ def getCurrentStreamVersion(config,stream):
 class filesystem_destination(destination):
     def connect(self):
         self.data_path = self.config.get('FileSystem','data_path')
+        self.data_path = os.path.join( self.config.get('Server', "var_path"), self.data_path )
         self.info_file = os.path.join( self.data_path, self.config.get('FileSystem','info_file') )
         if not os.path.exists(self.data_path):
             os.makedirs(self.data_path)
