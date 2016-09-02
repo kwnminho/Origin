@@ -3,6 +3,7 @@ from origin.server import destination
 from origin import data_types, timestamp
 import os
 import numpy as np
+import sys, traceback
 
 def getDirectoryList(dir):
     return [ d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir,d)) ]
@@ -49,6 +50,12 @@ class filesystem_destination(destination):
                 print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name])
 
     def createNewStream(self,stream,version,template,keyOrder):
+        # generate formatStr for stream if possible, strings are not supported in binary
+        # do early to trigger exception before write to disk
+        err, formatStr = self.formatString(template,keyOrder)
+        if err > 0:
+            formatStr = ''
+
         stream_path = os.path.join(os.path.join(self.data_path,stream))
         if version == 1:    # create a new stream group under root
             os.mkdir(stream_path)
@@ -66,13 +73,13 @@ class filesystem_destination(destination):
         os.mknod( os.path.join(stream_path, version_dir, timestamp) )
         for field in template:
             os.mknod( os.path.join(stream_path, version_dir, field) )
-    
+
         # update the stream inventory, in memory and on disk
         self.knownStreamVersions[stream] = {
                 "version"   : version,
                 "id"        : streamID,
                 "keyOrder"  : keyOrder,
-                "formatStr" : self.formatString(template,keyOrder),
+                "formatStr" : formatStr
         }
         with open(self.info_file, 'w') as json_data:
             json_data.write(json.dumps(self.knownStreamVersions))
@@ -100,64 +107,69 @@ class filesystem_destination(destination):
         if definition is None:
             definition = self.knownStreams[stream]
 
-        idx_start = None
-        idx_stop = None
+        start_idx = None
+        stop_idx = None
         try:
-            f = open(os.path.join(current_stream_version,timestamp),'r')
+            tsfile = os.path.join(current_stream_version,timestamp)
+            f = open(tsfile,'r')
             i = 0
             data = {}
             data[timestamp] = []
             while True:
                 x = f.readline()
                 x = x.strip()
-                if not x: break
+                if not x: 
+                    break
                 x = long(x) 
                 if (start_idx is None) and (x >= start):
                     start_idx = i
-                if (start_idx is not None) and (x <= stop):
+                if (start_idx is not None) and (x >= stop):
                     stop_idx = i
                     break
                 if start_idx is not None:
-                    data[timestamp] = data[timestamp].append(x)
+                    data[timestamp].append(x)
                 i += 1
             if (start_idx is not None) and (stop_idx is None):
-                start_idx = i
+                stop_idx = i
 
+        except ValueError:
+            self.logger.error("Error casting timestamp to type long. x=`{}` in {}".format(x, tsfile))
         except:
-            pass
+            self.logger.error("Unexpected exception reading from data file. Message code:")
+            self.logger.error(traceback.print_exc(file=sys.stdout))
         finally:
             f.close()
 
-        if (idx_start is None) or (idx_stop is None):
+        if (start_idx is None) or (stop_idx is None):
             msg = "error in indexing (index start, index stop): ({},{})"
-            self.logger.warning(msg.format(idx_start,idx_stop))
+            self.logger.warning(msg.format(start_idx,stop_idx))
             raise IndexError
 
-        self.logger.debug((idx_start,idx_stop))
+        self.logger.debug((start_idx,stop_idx))
         for field in definition:
             data[field] = []
+            dtype = self.knownStreams[stream][field]['type']
+            type_cast = data_types[dtype]['type']
             try:
                 f = open(os.path.join(current_stream_version,field),'r')
                 i = 0
                 while i <= stop_idx:
                     x = f.readline()
                     if i >= start_idx:
-                        x = x.strip()
-                        if template[field] in ['int', 'uint', 'int8', 'uint8', 'int16', 'uint16']:
-                            x = int(x)
-                        elif template[field] in ['int64', 'uint64']:
-                            x = long(x)
-                        elif template[field] in ['float', 'double']:
-                            x = float(x)
-                        elif template[field] in ['string']:
-                            x = x
-                        else:
-                            raise
-                        data[field] = data[field].append(x)
+                        x = type_cast(x.strip())
+                        data[field].append(x)
+                    i += 1
+            except ValueError:
+                pass # reached EOF
             except:
+                self.logger.error("Unexpected exception reading from data file. Message code:")
+                self.logger.error(traceback.print_exc(file=sys.stdout))
                 raise IndexError
+            finally:
+                f.close()
         return data
         
     # read stream.field data from storage between the timestamps given by time = [start,stop]
     def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
+        # send dummy dict with single field
+        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) 
