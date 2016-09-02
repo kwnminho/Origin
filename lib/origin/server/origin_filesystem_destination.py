@@ -168,8 +168,3 @@ class filesystem_destination(destination):
             finally:
                 f.close()
         return data
-        
-    # read stream.field data from storage between the timestamps given by time = [start,stop]
-    def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        # send dummy dict with single field
-        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) 

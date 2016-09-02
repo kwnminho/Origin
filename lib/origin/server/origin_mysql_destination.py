@@ -84,10 +84,10 @@ class mysql_destination(destination):
         else:
             query = "UPDATE origin_streams SET version=%d WHERE name=\"%s\""%(version,stream) 
         print cursor.execute(query)
-        # streamID = cursor.lastrowid #this doesn't seem to work with update, even though it should
+        #streamID = cursor.lastrowid #this doesn't seem to work with update, even though it should
         cursor.execute("SELECT id FROM origin_streams WHERE name=\"%s\" LIMIT 1"%(stream))
         streamID = cursor.fetchone()[0]
-        print "streamID: ", streamID
+        #print "streamID: ", streamID
 
         fields = []
         for fieldName in template.keys():
@@ -146,3 +146,34 @@ class mysql_destination(destination):
 
         self.cursor.execute(query,values)
         self.cnx.commit()
+
+    # read stream data from storage between the timestamps given by time = [start,stop]
+    def getRawStreamData(self,stream,start=None,stop=None,definition=None):
+        start, stop = self.validateTimeRange(start,stop)
+        self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
+
+        if definition is None:
+            definition = self.knownStreams[stream]
+        
+        fieldList = [ field for field in definition ]
+        query = "SELECT %s FROM measurements_%s_%d WHERE %s BETWEEN %d AND %d"
+        values = (
+            ",".join(fieldList),
+            stream, 
+            self.knownStreamVersions[stream]["version"], 
+            timestamp, 
+            start, 
+            stop
+        )
+        #print query % values
+        self.cursor.execute(query % values)
+
+        data = {}
+        for field in fieldList:
+            data[field] = []
+
+        for row in self.cursor.fetchall():
+            for i, field in enumerate(fieldList):
+                data[field].append(row[i])
+
+        return data

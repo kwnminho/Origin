@@ -43,7 +43,7 @@ class server_connection:
         try:
             msgData.append(kwargs[timestamp])
         except KeyError:
-            # 0 value timestamp means timestamp at server
+            #print "No timestamp specified, server will timestamp on arrival"
             msgData.append(0)
         if self.format is None:
             for k in self.keyOrder:

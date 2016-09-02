@@ -116,8 +116,8 @@ class destination:
         
     # read stream.field data from storage between the timestamps given by time = [start,stop]
     def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        raise NotImplementedError
-        
+        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
+
     # get statistics on the stream data during the time window time = [start, stop]
     def getStatStreamData(self,stream,start=None,stop=None):
         try:

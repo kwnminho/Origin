@@ -226,10 +226,6 @@ class hdf5_destination(destination):
             data[field] = raw_data[field][idx_start:idx_stop].tolist() # json method cant handle numpy array
         return data
         
-    # read stream.field data from storage between the timestamps given by time = [start,stop]
-    def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
-
     # get raw_data in range from the archived data
     def getArchivedStreamData(self,stream_group,start,stop,buffer_data,definition):
         time_dset = stream_group[timestamp]
