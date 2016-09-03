@@ -24,43 +24,10 @@ class mongodb_destination(destination):
         self.knownStreams = knownStreams
         self.knownStreamVersions = knownStreamVersions
 
-    def createNewStream(self,stream,version,template,keyOrder):
-        if version > 1:
-            stream_obj = self.db.knownStreams.find_one({"stream":stream})
-            streamID = stream_obj['id']
-        else:   # need a unique streamID, get max and increment
-            streamID = 0
-            for s in self.db.knownStreams.find():
-                if s['id'] > streamID:
-                    streamID = s['id']
-            streamID += 1
-            stream_obj = { 
-                    "stream":stream, 
-                    "id":streamID, 
-                    "versions":[] 
-                }
-            
-        # generate binary format string if possible
-        err, formatStr = self.formatString( template, keyOrder )
-        if err > 0:
-            formatStr = ''
-        # generate stream definition from template and key order
-        definition = {}
-        for i, key in enumerate(keyOrder):
-            definition[key] = { "type": template[key], "keyIndex": i }
-        # prepare object for insertion as document
-        stream_obj["version"] = version
-        stream_obj["definition"] = definition
-        stream_obj["formatStr"] = formatStr
-        stream_obj["versions"].append({
-            "version"   : version,
-            "id"        : streamID,
-            "keyOrder"  : keyOrder,
-            "formatStr" : formatStr,
-            "definition": definition
-        })
+    def createNewStreamDestination(self,stream_obj):
+        streamID = stream_obj["id"]
         # update/create document in db
-        result = self.db.knownStreams.replace_one({'id': streamID}, stream_obj, upsert=True)
+        self.db.knownStreams.replace_one({'id': streamID}, stream_obj, upsert=True)
         return streamID
 
     def insertMeasurement(self,stream,measurements):
@@ -74,7 +41,6 @@ class mongodb_destination(destination):
     # read stream data from storage between the timestamps given by time = [start,stop]
     def getRawStreamData(self,stream,start=None,stop=None,definition=None):
         start, stop = self.validateTimeRange(start,stop)
-        self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
 
         stream_obj = self.knownStreams[stream]
         stream_collection = "{}_{}".format(stream, stream_obj["version"])

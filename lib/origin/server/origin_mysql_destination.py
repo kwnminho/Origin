@@ -36,24 +36,28 @@ class mysql_destination(destination):
         cursor.execute(streamCreation)
         cursor.execute(streamFieldCreation)
 
-        currentStreamNamesVersions= []
+        # no json object to read, so we need to build from data
+        # could change to store data in a json blob later
+        currentStreamVersions= []
         query = "SELECT id,name,version from origin_streams"
         cursor.execute(query)
         for id,name,version in cursor:
-            currentStreamNamesVersions.append((id,name,version))
+            currentStreamVersions.append((id,name,version))
 
-        currentStreamNameDefinitions = {}
-        currentStreamVersions = {}
+        knownStreamVersions = {}
+        knownStreams = {}
 
-        for id,name,version in currentStreamNamesVersions:
+        for id,name,version in currentStreamVersions:
             query = "SELECT field_name,field_type,keyIndex FROM origin_stream_fields WHERE stream_name=\"%s\" and version=%d"%(name,version)
             cursor.execute(query)
+
             definition = {}
             for field_name,field_type,keyIndex in cursor:
                 definition[field_name] = {"type":field_type, "keyIndex":keyIndex}
-            currentStreamNameDefinitions[name] = definition
+
+            knownStreamVersions[name] = definition
             # generate keyOrder this should probably be nicer
-            keyOrder = [None] * len(currentStreamNameDefinitions[name])
+            keyOrder = [None] * len(knownStreamVersions[name])
             template = {}
             for key in definition:
                 keyOrder[definition[key]["keyIndex"]] = key
@@ -63,49 +67,50 @@ class mysql_destination(destination):
             if err > 0:
                 formatStr = ''
 
-            currentStreamVersions[name] = {
-                    "version": version, 
-                    "id": id, 
-                    "keyOrder": keyOrder, 
-                    "formatStr": formatStr
+            knownStreams[name] = { # not including older versions since it is hard right now
+                    "stream"     : name,
+                    "id"         : id, 
+                    "version"    : version, 
+                    "keyOrder"   : keyOrder, 
+                    "formatStr"  : formatStr,
+                    "definition" : definition,
+                    "versions"   : []
             }
             
-        for stream in currentStreamNameDefinitions.keys():
-            for field_name in currentStreamNameDefinitions[stream].keys():
-                print "  Field: %s (%s)"%(field_name,currentStreamNameDefinitions[stream][field_name])
-        self.knownStreamVersions = currentStreamVersions
-        self.knownStreams = currentStreamNameDefinitions
+        self.knownStreamVersions = knownStreamVersions
+        self.knownStreams = knownStreams
+        self.print_stream_info()
         self.cnx.commit()
 
-    def createNewStream(self,stream,version,template,keyOrder):
+    def createNewStreamDestination(self,stream_obj):
         cursor = self.cursor
+        stream = stream_obj["stream"]
+        version = stream_obj["version"]
+
         if version == 1:
             query = "INSERT INTO origin_streams (name, version) VALUES (\"%s\",%d)"%(stream,version)
         else:
             query = "UPDATE origin_streams SET version=%d WHERE name=\"%s\""%(version,stream) 
-        print cursor.execute(query)
+        cursor.execute(query)
         #streamID = cursor.lastrowid #this doesn't seem to work with update, even though it should
         cursor.execute("SELECT id FROM origin_streams WHERE name=\"%s\" LIMIT 1"%(stream))
         streamID = cursor.fetchone()[0]
-        #print "streamID: ", streamID
+        # overwrite streamID using the correct one
+        self.knownStreams[stream]['id'] = streamID
 
         fields = []
-        for fieldName in template.keys():
+        definition = stream_obj['definition']
+        for fieldName in definition.keys():
             idx = None
-            fieldType = template[fieldName]
+            fieldType = definition[fieldName]['type']
+            idx = definition[fieldName]['keyIndex']
             try:
-                fields.append( (fieldName,data_types[fieldType]["mysql"]) )
+                fields.append( (fieldName, data_types[fieldType]["mysql"]) )
             except KeyError:
                 pass
-            try:
-                for i, k in enumerate(keyOrder):
-                    if k == fieldName:
-                        idx = i
-                        break
-            except TypeError:
-                pass
+
             query = """INSERT INTO origin_stream_fields 
-                    VALUES ("%s","%s",%d,"%s",%d)"""%(stream,fieldName,version,template[fieldName],idx)
+                    VALUES ("%s","%s",%d,"%s",%d)"""%(stream,fieldName,version,fieldType,idx)
             cursor.execute(query)
 
         query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,%s "%(stream,version, timestamp)
@@ -117,7 +122,7 @@ class mysql_destination(destination):
 
 
         for i in range(0,len(fields)):
-            query = query + "%s %s,"%(fields[i][0],fields[i][1])
+            query = query + "%s %s,"%fields[i]
         query = query + "PRIMARY KEY (id))"
         cursor.execute(query)
         query = "DROP VIEW IF EXISTS measurements_%s "%(stream)
@@ -142,7 +147,8 @@ class mysql_destination(destination):
         fmt[-1] =  ")"
         valuePlaceholders = "(" + ','.join(["%s"]*len(measurementArray)) + ")"
 
-        query = "INSERT INTO measurements_%s_%d %s VALUES %s"%(stream,self.knownStreamVersions[stream]["version"],''.join(fmt),valuePlaceholders)
+        version = self.knownStreams[stream]["version"]
+        query = "INSERT INTO measurements_%s_%d %s VALUES %s"%(stream,version,''.join(fmt),valuePlaceholders)
 
         self.cursor.execute(query,values)
         self.cnx.commit()
@@ -150,17 +156,16 @@ class mysql_destination(destination):
     # read stream data from storage between the timestamps given by time = [start,stop]
     def getRawStreamData(self,stream,start=None,stop=None,definition=None):
         start, stop = self.validateTimeRange(start,stop)
-        self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
 
         if definition is None:
-            definition = self.knownStreams[stream]
+            definition = self.knownStreamVersions[stream]
         
         fieldList = [ field for field in definition ]
         query = "SELECT %s FROM measurements_%s_%d WHERE %s BETWEEN %d AND %d"
         values = (
             ",".join(fieldList),
             stream, 
-            self.knownStreamVersions[stream]["version"], 
+            self.knownStreams[stream]["version"], 
             timestamp, 
             start, 
             stop

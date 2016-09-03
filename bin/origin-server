@@ -299,7 +299,7 @@ def main():
 
   # Add Console logger 
   cLog = logging.StreamHandler()
-  cLog.setLevel("DEBUG")
+  cLog.setLevel("INFO")
   formatter = logging.Formatter('%(levelname)s - %(message)s')
   cLog.setFormatter(formatter)
   logger.addHandler(cLog)

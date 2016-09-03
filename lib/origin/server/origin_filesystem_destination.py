@@ -25,71 +25,44 @@ class filesystem_destination(destination):
             self.logger.info("Creating data directory at: " + self.data_path)
 
     def readStreamDefTable(self):
+        knownStreams = {}
+        knownStreamVersions = {}
         try:
             with open(self.info_file, 'r') as f:
                 json_data = f.read()
-            self.knownStreamVersions = json.loads(json_data)
+            knownStreams = json.loads(json_data)
         except IOError:
             self.logger.debug("Info file `{}` not found".format(self.info_file))
-            self.knownStreamVersions = {}
+            knownStreams = {}
 
-        self.knownStreams = {}
-        dir_list = getDirectoryList(self.data_path)
-        for stream in self.knownStreamVersions:
-            if stream in dir_list:
-                current_stream_version = getCurrentStreamVersion(self.config,stream)
-                with open(os.path.join(current_stream_version,'definition.json'), 'r') as f:
-                    json_data = f.read()
-                self.knownStreams[stream] = json.loads(json_data)
-            else:
-                self.logger.error("Stream '{}' found in stream list, but is not a group")
+        for stream in knownStreams:
+            knownStreamVersions[stream] = knownStreams[stream]['definition']
 
-        for stream in self.knownStreams:
-            print "="*10, " {} ".format(stream), "="*10
-            for field_name in self.knownStreamVersions[stream]:
-                print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name])
+        self.knownStreams=knownStreams
+        self.knownStreamVersions=knownStreamVersions
+        self.print_stream_info()
 
-    def createNewStream(self,stream,version,template,keyOrder):
-        # generate formatStr for stream if possible, strings are not supported in binary
-        # do early to trigger exception before write to disk
-        err, formatStr = self.formatString(template,keyOrder)
-        if err > 0:
-            formatStr = ''
-
+    def createNewStreamDestination(self,stream_obj):
+        stream = stream_obj["stream"]
+        version = stream_obj["version"]
         stream_path = os.path.join(os.path.join(self.data_path,stream))
         if version == 1:    # create a new stream group under root
             os.mkdir(stream_path)
-            streamID = len(getDirectoryList(self.data_path))
-        else:
-            streamID = self.knownStreamVersions[stream]["id"]
-        # create a new subgroup for this instance of the current stream
-        version_dir = stream+'_'+str(version)
-        stream_ver = os.path.join( stream_path, version_dir )
 
+        # create a new subgroup for this instance of the current stream
+        version_dir = stream + '_' + str(version)
+        stream_ver = os.path.join( stream_path, version_dir )
         os.mkdir( os.path.join(stream_path, version_dir) )
+        # point currentVersion.txt file at most current version
         with open( os.path.join(stream_path, 'currentVersion.txt'), 'w' ) as f:
             f.write(version_dir)
-
-        os.mknod( os.path.join(stream_path, version_dir, timestamp) )
-        for field in template:
-            os.mknod( os.path.join(stream_path, version_dir, field) )
-
-        # update the stream inventory, in memory and on disk
-        self.knownStreamVersions[stream] = {
-                "version"   : version,
-                "id"        : streamID,
-                "keyOrder"  : keyOrder,
-                "formatStr" : formatStr
-        }
+        # update the main info file
         with open(self.info_file, 'w') as json_data:
-            json_data.write(json.dumps(self.knownStreamVersions))
-        # create the stream field definition dict
-        definition = {}
-        for i, key in enumerate(keyOrder):
-            definition[key] = { "type": template[key], "keyIndex": i }
+            json_data.write(json.dumps(self.knownStreams))
+        # create the stream field definition dict file
         with open( os.path.join(stream_path, version_dir, 'definition.json'), 'w' ) as f:
-            f.write( json.dumps(definition) )
-        return streamID
+            f.write( json.dumps(stream_obj['definition']) )
+        return stream_obj['id']
 
     def insertMeasurement(self,stream,measurements):
         current_stream_version = getCurrentStreamVersion(self.config,stream)
@@ -101,11 +74,14 @@ class filesystem_destination(destination):
     # only takes timestamps in seconds
     def getRawStreamData(self,stream,start=None,stop=None,definition=None):
         start, stop = self.validateTimeRange(start,stop)
-        self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
         # get data from buffer
-        current_stream_version = getCurrentStreamVersion(self.config,stream)
+        try:
+            current_stream_version = getCurrentStreamVersion(self.config,stream)
+        except IOError:
+            self.logger.debug("Read requested on empty dataset. stream: {}", stream)
+            raise IndexError
         if definition is None:
-            definition = self.knownStreams[stream]
+            definition = self.knownStreamVersions[stream]
 
         start_idx = None
         stop_idx = None
@@ -113,14 +89,13 @@ class filesystem_destination(destination):
             tsfile = os.path.join(current_stream_version,timestamp)
             f = open(tsfile,'r')
             i = 0
-            data = {}
-            data[timestamp] = []
+            data = { timestamp : [] }
+            dtype = data_types[self.config.get('Server','timestamp_type')]['type']
             while True:
                 x = f.readline()
                 x = x.strip()
-                if not x: 
-                    break
-                x = long(x) 
+                if not x: break
+                x = dtype(x) 
                 if (start_idx is None) and (x >= start):
                     start_idx = i
                 if (start_idx is not None) and (x >= stop):
@@ -148,7 +123,7 @@ class filesystem_destination(destination):
         self.logger.debug((start_idx,stop_idx))
         for field in definition:
             data[field] = []
-            dtype = self.knownStreams[stream][field]['type']
+            dtype = self.knownStreamVersions[stream][field]['type']
             type_cast = data_types[dtype]['type']
             try:
                 f = open(os.path.join(current_stream_version,field),'r')

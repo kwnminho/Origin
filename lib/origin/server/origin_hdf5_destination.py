@@ -26,41 +26,31 @@ class hdf5_destination(destination):
             except IOError:
                 self.logger.error("Unable to create data file: {}".format(f))
 
-
     def readStreamDefTable(self):
+        knownStreams = {}
+        knownStreamVersions = {}
         try:
-            self.knownStreamVersions = json.loads(self.hdf5_file.attrs['knownStreamVersions'])
+            knownStreams = json.loads(self.hdf5_file.attrs['knownStreams'])
         except KeyError:
-            self.logger.debug("knownStreamVersions attribute not found") 
-            self.knownStreamVersions = {}
+            self.logger.debug("knownStreams attribute not found") 
+            knownStreams = {}
 
-        self.knownStreams = {}
-        for stream in self.knownStreamVersions:
-            if stream in self.hdf5_file:
-                current_stream_version = self.hdf5_file[stream].attrs['currentVersion']
-                definition = self.hdf5_file[current_stream_version].attrs['definition']
-                self.knownStreams[stream] = json.loads(definition)
-            else:
-                self.logger.error("Stream '{}' found in stream list, but is not a group")
+        for stream in knownStreams:
+            knownStreamVersions[stream] = knownStreams[stream]['definition']
 
-        for stream in self.knownStreams:
-            print "="*10, " {} ".format(stream), "="*10
-            for field_name in self.knownStreamVersions[stream]:
-                print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name])
+        self.knownStreams=knownStreams
+        self.knownStreamVersions=knownStreamVersions
+        self.print_stream_info()
 
-    def createNewStream(self,stream,version,template,keyOrder):
+    def createNewStreamDestination(self,stream_obj):
+        stream = stream_obj['stream']
+        version = stream_obj['version']
         if version == 1:    # create a new stream group under root
             stream_group = self.hdf5_file.create_group(stream)
-            streamID = len(self.hdf5_file)
         else:
             stream_group = self.hdf5_file[stream]
-            streamID = self.knownStreamVersions[stream]["id"]
         # create a new subgroup for this instance of the current stream
         stream_ver = stream_group.create_group( stream + '_' + str(version) )
-
-        err, formatStr = self.formatString(template,keyOrder)
-        if err > 0:
-            formatStr = ''
 
         # soft link is not working?
         stream_group.attrs['currentVersion'] = stream_ver.name
@@ -88,12 +78,14 @@ class hdf5_destination(destination):
                 , dtype=data_types[tstype]['numpy']
                 , chunks=chunksize
         )
+        template = stream_obj['definition']
         for field in template:
+            dt = data_types[template[field]['type']]['numpy']
             stream_ver.create_dataset(
                     field
                     , chunksize
                     , maxshape = (None,)
-                    , dtype=data_types[template[field]]['numpy']
+                    , dtype=dt
                     , chunks=chunksize
                     , compression=compression
             )
@@ -101,24 +93,13 @@ class hdf5_destination(destination):
                     field + "_buffer"
                     , buff_size
                     , maxshape = buff_size
-                    , dtype=data_types[template[field]]['numpy']
+                    , dtype=dt
                     , chunks=chunksize
             )
     
-        # update the stream inventory, in memory and on disk
-        self.knownStreamVersions[stream] = {
-                "version"   : version,
-                "id"        : streamID,
-                "keyOrder"  : keyOrder,
-                "formatStr" : formatStr
-        }
-        self.hdf5_file.attrs['knownStreamVersions'] = json.dumps(self.knownStreamVersions)
-        # create the stream field definition dict
-        definition = {}
-        for i, key in enumerate(keyOrder):
-            definition[key] = { "type": template[key], "keyIndex": i }
-        stream_ver.attrs['definition'] = json.dumps(definition)
-        return streamID
+        self.hdf5_file.attrs['knownStreams'] = json.dumps(self.knownStreams)
+        stream_ver.attrs['definition'] = json.dumps(self.knownStreamVersions[stream])
+        return stream_obj['id']
 
     def insertMeasurement(self,stream,measurements):
         dgroup = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
@@ -141,12 +122,9 @@ class hdf5_destination(destination):
 
         dgroup.attrs['row_count'] = row_count # move pointer for next entry
         dgroup.attrs['row_count_buffer'] = row_count_buffer # move pointer for next entry
-        #self.logger.debug("Stream `{}` current row pointer: {}".format(stream,row_count))
-        #self.logger.debug("Stream `{}` current row buffer pointer: {}".format(stream,row_count_buffer))
 
-        #self.logger.debug("Datasets `{}.*` shape: {}".format(stream,dgroup[timestamp].shape))
         for field in measurements:
-            if (field != timestamp) and (self.knownStreams[stream][field]['type'] == "string"):
+            if (field != timestamp) and (self.knownStreamVersions[stream][field]['type'] == "string"):
                 measurements[field] = measurements[field].encode("ascii","ignore")
             dgroup[field+"_buffer"][row_count_buffer] = measurements[field]
 
@@ -158,7 +136,7 @@ class hdf5_destination(destination):
         # get data from buffer
         stream_group = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
         if definition is None:
-            definition = self.knownStreams[stream]
+            definition = self.knownStreamVersions[stream]
 
         # read ring buffers and pointers in case the pointer advances during read
         raw_data = {}

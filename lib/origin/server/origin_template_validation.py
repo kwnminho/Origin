@@ -2,8 +2,6 @@
 # should check that the values are in the list of known values
 # TODO: check key order is preserved?
 def template_validation(templateDest,templateReference):
-  print templateDest
-  print templateReference
   if len(templateDest) != len(templateReference):
     return False
   try: 

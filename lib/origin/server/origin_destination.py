@@ -6,6 +6,41 @@ import struct
 import numpy as np
 import sys
 
+################################################################################
+#
+#   Metadata format:
+#   
+#   knownStreams : {
+#       `stream name` : {
+#           stream     : `stream_name`,
+#           id         : `streamID`,
+#           version    : `version`,
+#           keyOrder   : `keyOrder`,
+#           formatStr  : `formatStr`,
+#           definition : { # most recent definition object
+#               `field1` : { "type":data_type, "keyIndex": `index` },
+#               `field2` : { "type":data_type, "keyIndex": `index` },
+#               ...
+#           }
+#           versions    : { # optional dict of older versions, version number is the hash
+#               1   : `defintion_obj`, # see above for definition format
+#               2   : `defintion_obj`,
+#               ... 
+#           }            
+#       },
+#       ...
+#   }
+#
+#   # current versiion definitions
+#   knownStreamVersions : {
+#       stream  : `definition_obj,
+#       stream  : `definition_obj,
+#       ...
+#   }
+#
+################################################################################
+
+
 class destination:
     def __init__(self,logger,config):
         self.logger = logger
@@ -25,6 +60,47 @@ class destination:
     # also enters formatStr into the knownStreams dict
     # return streamID
     def createNewStream(self,stream,version,template,keyOrder):
+        # generate formatStr for stream if possible, strings are not supported in binary
+        # do early to trigger exception before write to disk
+        err, formatStr = self.formatString(template,keyOrder)
+        if err > 0:
+            formatStr = ''
+        streamID = self.get_streamID(stream)
+
+        definition = {}
+        for i, key in enumerate(keyOrder):
+            definition[key] = {"type": template[key], "keyIndex": i}
+
+        if version > 1:
+            stream_obj = self.knownStreams[stream]
+        else:
+            stream_obj = { 
+                "stream"     : stream, 
+                "id"         : streamID, 
+                "versions"   : []
+            }
+
+        stream_obj["version"] = version
+        stream_obj["keyOrder"] = keyOrder 
+        stream_obj["formatStr"] = formatStr
+        stream_obj["definition"] = definition
+        stream_obj["versions"].append({
+            "version"    : version, 
+            "keyOrder"   : keyOrder,
+            "formatStr"  : formatStr,
+            "definition" : definition,
+        })
+
+        # update the stream inventory
+        self.knownStreams[stream] = stream_obj
+        self.knownStreamVersions[stream] = stream_obj['definition']
+        streamID = self.createNewStreamDestination(stream_obj) # id might get updated
+        return streamID
+
+    # creates a new stream or creates a new version of a stream based on template. 
+    # also enters formatStr into the knownStreams dict
+    # return streamID
+    def createNewStreamDestintion(self,stream_obj):
         raise NotImplementedError
 
     def formatString(self,template,keyOrder):
@@ -135,6 +211,8 @@ class destination:
                     min = np.nanmin(streamData[field])
                     data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
+        except ValueError, IndexError:
+            result, resultText = (1,"Could not process request.")
         except:
             self.logger.exception("Exception in server code:")
             result, resultText = (1,"Could not process request.")
@@ -155,6 +233,8 @@ class destination:
             min = np.nanmin(fieldData[field])
             data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
+      except ValueError, IndexError:
+        result, resultText = (1,"Could not process request.")
       except:
         self.logger.exception("Exception in server code:")
         result, resultText = (1,"Could not process request.")
@@ -173,7 +253,27 @@ class destination:
             self.logger.debug("Using default start time")
             start = stop - 5*60L*2**32 # 5 minute range default
         if start > stop:
-            self.logger.info("Requested read range out of order. Swapping range.")
+            self.logger.warning("Requested read range out of order. Swapping range.")
+            self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
             return (stop, start)
         else:
+            self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
             return (start, stop)
+
+    def print_stream_info(self):
+        print "\n"
+        for stream in self.knownStreamVersions:
+            print "\n", "="*20, " {} ".format(stream), "="*20
+            for field_name in self.knownStreamVersions[stream]:
+                print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name]['type'])
+        print "\n"
+
+    def get_streamID(self,stream):
+        if stream in self.knownStreams:
+            return self.knownStreams[stream]['id']
+        streamID = 0
+        for s in self.knownStreams:
+            sid = self.knownStreams[s]['id']
+            if sid > streamID:
+                streamID = sid
+        return streamID + 1
