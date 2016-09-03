@@ -77,6 +77,10 @@ class MonServer(object):
         from origin.server import filesystem_destination
         self.dest = filesystem_destination(logger,config)
 
+    elif dest == "mongodb":
+        from origin.server import mongodb_destination
+        self.dest = mongodb_destination(logger,config)
+
     elif dest == '':
         print "No destination specified in configs"
         sys.exit(1)

@@ -53,9 +53,9 @@ class destination:
             update = True
             destVersion = 1
         else:
-            streamID = self.knownStreamVersions[stream]["id"]
-            destVersion = self.knownStreamVersions[stream]["version"]
-            if template_validation(template,self.knownStreams[stream]):
+            streamID = self.knownStreams[stream]["id"]
+            destVersion = self.knownStreams[stream]["version"]
+            if template_validation(template,self.knownStreamVersions[stream]):
                 self.logger.info("Known stream, %s matching current defintion, so no database modification needed"%(stream))
                 update = False
             else:
@@ -75,7 +75,7 @@ class destination:
             self.logger.warning("trying to add a measurement to data on an unknown stream: {}".format(stream))
             return (1,"Unknown stream")
 
-        if not measurement_validation(measurements,self.knownStreams[stream]):
+        if not measurement_validation(measurements,self.knownStreamVersions[stream]):
             self.logger.warning("Measurement didn't validate against the pre-determined format")
             return (1,"Invalid measurements against schema")
 
@@ -92,21 +92,21 @@ class destination:
 
     def measurementOrdered(self,stream,ts,measurements):
         meas = {}
-        for key in self.knownStreams[stream]:
-          idx = self.knownStreams[stream][key]["keyIndex"]
+        for key in self.knownStreamVersions[stream]:
+          idx = self.knownStreamVersions[stream][key]["keyIndex"]
           meas[key] = measurements[idx]
 	meas[timestamp] = ts
         return self.measurement(stream,meas)
 
     def measurementBinary(self,stream,measurements):
-        dtuple = struct.unpack_from(self.knownStreamVersions[stream]["formatStr"], measurements)
+        dtuple = struct.unpack_from(self.knownStreams[stream]["formatStr"], measurements)
         meas = list(dtuple[1:])
 	ts = dtuple[0]
         return self.measurementOrdered(stream,ts,meas)
 
     def findStream(self, streamID):
-        for stream in self.knownStreamVersions:
-            if self.knownStreamVersions[stream]["id"] == streamID:
+        for stream in self.knownStreams:
+            if self.knownStreams[stream]["id"] == streamID:
                 return stream
         raise ValueError
 
@@ -126,7 +126,7 @@ class destination:
             for field in streamData:
                 if field == timestamp:
                     data[field] = {'start': streamData[field][0], 'stop': streamData[field][1]}
-                elif self.knownStreams[stream][field]['type'] == 'string':
+                elif self.knownStreamVersions[stream][field]['type'] == 'string':
                     data[field] = streamData[field] # TODO: figure out how to handle this
                 else:
                     avg = np.nanmean(streamData[field])
@@ -146,7 +146,7 @@ class destination:
       try:
         fieldData = self.getRawStreamFieldData(stream,field,start,stop)
         data = {}
-        if self.knownStreams[stream][field]['type'] == 'string':
+        if self.knownStreamVersions[stream][field]['type'] == 'string':
             data[field] = fieldData[field] # TODO: figure out how to handle this
         else:
             avg = np.nanmean(fieldData[field])
