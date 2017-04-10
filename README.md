@@ -24,6 +24,7 @@ The default data storage is h5py.
 * [mysql.connector](http://cdn.mysql.com/Downloads/Connector-Python/mysql-connector-python-1.2.3.zip)
 
 ```bash
+sudo apt-get install python-dev (if you haven't already)
 pip install pyzmq
 pip install h5py
 pip install http://cdn.mysql.com/Downloads/Connector-Python/mysql-connector-python-1.2.3.zip
@@ -52,7 +53,7 @@ FLUSH PRIVILEGES;
 We now need to enter project specific information to the configuration file for the server.
 
 ```bash
-git clone http://github.com/Orthogonal-Systems/Origin
+git clone http://github.com/QuantumQuadrate/Origin
 cd Origin
 git checkout dev
 vim lib/origin/origin_config.py
