@@ -2,26 +2,37 @@
 
 import sys
 import os
-fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
-fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
-sys.path.append(fullLibPath)
+import random
 import time
 import zmq
 import json
 
-import origin
-if len(sys.argv) > 1:
-  configBundle = sys.argv[1]
-  origin.configure(configBundle)
-else:
-  origin.configure("site")
+# first find ourself
+fullBinPath  = os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
+fullLibPath  = os.path.join(fullBasePath, "lib")
+fullCfgPath  = os.path.join(fullBasePath, "config")
+sys.path.append(fullLibPath)
 
-from origin import current_time, timestamp, config
+from origin.client import server, random_data
+from origin import current_time, timestamp
+
+if len(sys.argv) > 1:
+  if sys.argv[1] == 'test':
+    configfile = os.path.join(fullCfgPath, "origin-server-test.cfg")
+  else:
+    configfile = os.path.join(fullCfgPath, sys.argv[1])
+else:
+  configfile = os.path.join(fullCfgPath, "origin-server.cfg")
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+config.read(configfile)
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
-host = config['origin_server']
-port = config['origin_read_port']
+host = config.get('Server','ip')
+port = config.getint('Server','read_port')
 socket.connect("tcp://%s:%s" % (host,port))
 
 stream_test_list = ['toy', ' toy_dtype_test1', ' toy_dtype_test2', 'noTimeTest']
@@ -40,7 +51,6 @@ while True:
         time.sleep(3)
     for stream in stream_test_list:
         print "sending raw read request for stream `{}`....".format(stream)
-        #request_obj = { 'stream': stream, "start": time.time()-30, 'raw': True } # only show 30 seconds not 5 min
         request_obj = { 'stream': stream, 'raw': True } 
         socket.send(json.dumps(request_obj))
         response = socket.recv()

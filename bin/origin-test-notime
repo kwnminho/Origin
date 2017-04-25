@@ -2,37 +2,37 @@
 
 import sys
 import os
-fullBinPath=os.path.abspath(os.getcwd() + "/" + sys.argv[0])
-fullLibPath=os.path.abspath(os.path.dirname(os.path.dirname(fullBinPath))+"/lib")
-sys.path.append(fullLibPath)
-import time
-
 import random
-import calendar
 import time
-import sys
 
-import origin
-if len(sys.argv) > 1:
-  configBundle = sys.argv[1]
-  origin.configure(configBundle)
-else:
-  origin.configure("site")
+# first find ourself
+fullBinPath  = os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
+fullLibPath  = os.path.join(fullBasePath, "lib")
+fullCfgPath  = os.path.join(fullBasePath, "config")
+sys.path.append(fullLibPath)
 
-
-from origin.client import monitoring_record
-from origin.client import server
-from origin.client import server_connection
+from origin.client import server, random_data
 from origin import current_time, timestamp
+
+if len(sys.argv) > 1:
+  if sys.argv[1] == 'test':
+    configfile = os.path.join(fullCfgPath, "origin-server-test.cfg")
+  else:
+    configfile = os.path.join(fullCfgPath, sys.argv[1])
+else:
+  configfile = os.path.join(fullCfgPath, "origin-server.cfg")
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+config.read(configfile)
+
+# something that represents the connection to the server
+serv = server(config)
 
 # just a proxy for actually doing something useful
 def makeTempMeasurement():
     return random.random()
-
-# something that represents the connection to the server
-# might need arguments.... idk
-serv = server()
-
 
 # alert the server that we are going to be sending this type of data
 connection = serv.registerStream(
@@ -41,11 +41,6 @@ connection = serv.registerStream(
         "toy1":"float",
         "toy2":"float",
         })
-
-# perhaps print some useful message. Perhaps try to reconnect....
-# print "problem establishing connection to server..."
-# sys.exit(1)
-
 
 # This might need to be more complicated, but you get the gist. Keep sending records forever    
 time.sleep(5)

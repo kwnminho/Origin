@@ -1,6 +1,7 @@
 from origin import data_types
 import random
 import struct
+import string
 
 def random_data( dtype ):
     if dtype.find("int") != -1:
@@ -13,5 +14,8 @@ def random_data( dtype ):
         
     elif (dtype == "float") or (dtype == "double"):
         return random.random() # not sure how to make a double
+    elif dtype == "string":
+        length = int(data_types["string"]["numpy"][1:])
+        return ''.join(random.choice(string.lowercase) for i in range(length))
     else:
         return None

@@ -1,14 +1,50 @@
 from origin.server import template_validation
 from origin.server import measurement_validation
-from origin import data_types, current_time, config, timestamp
+from origin import data_types, current_time, timestamp
 
 import struct
 import numpy as np
 import sys
 
+################################################################################
+#
+#   Metadata format:
+#   
+#   knownStreams : {
+#       `stream name` : {
+#           stream     : `stream_name`,
+#           id         : `streamID`,
+#           version    : `version`,
+#           keyOrder   : `keyOrder`,
+#           formatStr  : `formatStr`,
+#           definition : { # most recent definition object
+#               `field1` : { "type":data_type, "keyIndex": `index` },
+#               `field2` : { "type":data_type, "keyIndex": `index` },
+#               ...
+#           }
+#           versions    : { # optional dict of older versions, version number is the hash
+#               1   : `defintion_obj`, # see above for definition format
+#               2   : `defintion_obj`,
+#               ... 
+#           }            
+#       },
+#       ...
+#   }
+#
+#   # current versiion definitions
+#   knownStreamVersions : {
+#       stream  : `definition_obj,
+#       stream  : `definition_obj,
+#       ...
+#   }
+#
+################################################################################
+
+
 class destination:
-    def __init__(self,logger):
+    def __init__(self,logger,config):
         self.logger = logger
+        self.config = config
         self.connect()
         self.readStreamDefTable()
 
@@ -24,12 +60,53 @@ class destination:
     # also enters formatStr into the knownStreams dict
     # return streamID
     def createNewStream(self,stream,version,template,keyOrder):
+        # generate formatStr for stream if possible, strings are not supported in binary
+        # do early to trigger exception before write to disk
+        err, formatStr = self.formatString(template,keyOrder)
+        if err > 0:
+            formatStr = ''
+        streamID = self.get_streamID(stream)
+
+        definition = {}
+        for i, key in enumerate(keyOrder):
+            definition[key] = {"type": template[key], "keyIndex": i}
+
+        if version > 1:
+            stream_obj = self.knownStreams[stream]
+        else:
+            stream_obj = { 
+                "stream"     : stream, 
+                "id"         : streamID, 
+                "versions"   : []
+            }
+
+        stream_obj["version"] = version
+        stream_obj["keyOrder"] = keyOrder 
+        stream_obj["formatStr"] = formatStr
+        stream_obj["definition"] = definition
+        stream_obj["versions"].append({
+            "version"    : version, 
+            "keyOrder"   : keyOrder,
+            "formatStr"  : formatStr,
+            "definition" : definition,
+        })
+
+        # update the stream inventory
+        self.knownStreams[stream] = stream_obj
+        self.knownStreamVersions[stream] = stream_obj['definition']
+        streamID = self.createNewStreamDestination(stream_obj) # id might get updated
+        return streamID
+
+    # creates a new stream or creates a new version of a stream based on template. 
+    # also enters formatStr into the knownStreams dict
+    # return streamID
+    def createNewStreamDestintion(self,stream_obj):
         raise NotImplementedError
 
     def formatString(self,template,keyOrder):
         formatStr = '!' # use network byte order
         try:
-            formatStr += data_types[config["timestamp_type"]]["format_char"]
+            formatStr += data_types[self.config.get("Server","timestamp_type")]["format_char"]
         except KeyError:
             formatStr += data_types["uint"]["format_char"]
 
@@ -41,7 +118,7 @@ class destination:
               return (1,"Unsupported type '{}' in binary data.".format(dtype))
           except KeyError:
             return (1,"Type \"{}\" not recognized.".format(dtype))
-        return formatStr
+        return (0, formatStr)
 
     # returns version and streamID
     def registerStream(self,stream,template,keyOrder=None):
@@ -52,9 +129,9 @@ class destination:
             update = True
             destVersion = 1
         else:
-            streamID = self.knownStreamVersions[stream]["id"]
-            destVersion = self.knownStreamVersions[stream]["version"]
-            if template_validation(template,self.knownStreams[stream]):
+            streamID = self.knownStreams[stream]["id"]
+            destVersion = self.knownStreams[stream]["version"]
+            if template_validation(template,self.knownStreamVersions[stream]):
                 self.logger.info("Known stream, %s matching current defintion, so no database modification needed"%(stream))
                 update = False
             else:
@@ -74,7 +151,7 @@ class destination:
             self.logger.warning("trying to add a measurement to data on an unknown stream: {}".format(stream))
             return (1,"Unknown stream")
 
-        if not measurement_validation(measurements,self.knownStreams[stream]):
+        if not measurement_validation(measurements,self.knownStreamVersions[stream]):
             self.logger.warning("Measurement didn't validate against the pre-determined format")
             return (1,"Invalid measurements against schema")
 
@@ -82,28 +159,30 @@ class destination:
             if measurements[timestamp] == 0:
                 raise KeyError
         except KeyError:
-            measurements[timestamp] = current_time(config)
+            measurements[timestamp] = current_time(self.config)
 
         self.insertMeasurement(stream,measurements)
         result = 0
         resultText = ""
         return (result,resultText)
 
-    def measurementOrdered(self,stream,measurements):
+    def measurementOrdered(self,stream,ts,measurements):
         meas = {}
-        for key in self.knownStreams[stream]:
-          idx = self.knownStreams[stream][key]["keyIndex"]
+        for key in self.knownStreamVersions[stream]:
+          idx = self.knownStreamVersions[stream][key]["keyIndex"]
           meas[key] = measurements[idx]
+	meas[timestamp] = ts
         return self.measurement(stream,meas)
 
     def measurementBinary(self,stream,measurements):
-        dtuple = struct.unpack_from(self.knownStreamVersions[stream]["formatStr"], measurements)
+        dtuple = struct.unpack_from(self.knownStreams[stream]["formatStr"], measurements)
         meas = list(dtuple[1:])
-        return self.measurementOrdered(stream,meas)
+	ts = dtuple[0]
+        return self.measurementOrdered(stream,ts,meas)
 
     def findStream(self, streamID):
-        for stream in self.knownStreamVersions:
-            if self.knownStreamVersions[stream]["id"] == streamID:
+        for stream in self.knownStreams:
+            if self.knownStreams[stream]["id"] == streamID:
                 return stream
         raise ValueError
 
@@ -113,21 +192,27 @@ class destination:
         
     # read stream.field data from storage between the timestamps given by time = [start,stop]
     def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        raise NotImplementedError
-        
+        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
+
     # get statistics on the stream data during the time window time = [start, stop]
     def getStatStreamData(self,stream,start=None,stop=None):
         try:
             streamData = self.getRawStreamData(stream,start,stop)
             data = {}
             for field in streamData:
-                if field != timestamp:
+                if field == timestamp:
+                    data[field] = {'start': streamData[field][0], 'stop': streamData[field][1]}
+                elif self.knownStreamVersions[stream][field]['type'] == 'string':
+                    data[field] = streamData[field] # TODO: figure out how to handle this
+                else:
                     avg = np.nanmean(streamData[field])
                     std = np.nanstd(streamData[field])
                     max = np.nanmax(streamData[field])
                     min = np.nanmin(streamData[field])
                     data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
+        except ValueError, IndexError:
+            result, resultText = (1,"Could not process request.")
         except:
             self.logger.exception("Exception in server code:")
             result, resultText = (1,"Could not process request.")
@@ -139,12 +224,17 @@ class destination:
       try:
         fieldData = self.getRawStreamFieldData(stream,field,start,stop)
         data = {}
-        avg = np.nanmean(fieldData[field])
-        std = np.nanstd(fieldData[field])
-        max = np.nanmax(fieldData[field])
-        min = np.nanmin(fieldData[field])
-        data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
+        if self.knownStreamVersions[stream][field]['type'] == 'string':
+            data[field] = fieldData[field] # TODO: figure out how to handle this
+        else:
+            avg = np.nanmean(fieldData[field])
+            std = np.nanstd(fieldData[field])
+            max = np.nanmax(fieldData[field])
+            min = np.nanmin(fieldData[field])
+            data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
+      except ValueError, IndexError:
+        result, resultText = (1,"Could not process request.")
       except:
         self.logger.exception("Exception in server code:")
         result, resultText = (1,"Could not process request.")
@@ -156,14 +246,34 @@ class destination:
             stop = long(stop)*2**32
         except TypeError:
             self.logger.debug("Using default stop time")
-            stop = current_time(config)
+            stop = current_time(self.config)
         try:
             start = long(start)*2**32
         except TypeError:
             self.logger.debug("Using default start time")
             start = stop - 5*60L*2**32 # 5 minute range default
         if start > stop:
-            self.logger.info("Requested read range out of order. Swapping range.")
+            self.logger.warning("Requested read range out of order. Swapping range.")
+            self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
             return (stop, start)
         else:
+            self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
             return (start, stop)
+
+    def print_stream_info(self):
+        print "\n"
+        for stream in self.knownStreamVersions:
+            print "\n", "="*20, " {} ".format(stream), "="*20
+            for field_name in self.knownStreamVersions[stream]:
+                print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name]['type'])
+        print "\n"
+
+    def get_streamID(self,stream):
+        if stream in self.knownStreams:
+            return self.knownStreams[stream]['id']
+        streamID = 0
+        for s in self.knownStreams:
+            sid = self.knownStreams[s]['id']
+            if sid > streamID:
+                streamID = sid
+        return streamID + 1

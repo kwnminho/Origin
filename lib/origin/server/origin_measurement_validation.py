@@ -1,9 +1,11 @@
-from origin import data_types
+from origin import data_types, timestamp
 
 # should check that the fields are consistent. That they aren't trying
 # to insert a string into a float field
 def measurement_validation(measurement,template):
-    mk = measurement.keys()
+    m = measurement
+    m.pop(timestamp,0)
+    mk = m.keys()
     mk.sort()
     tk = template.keys()
     tk.sort()
