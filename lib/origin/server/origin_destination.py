@@ -213,6 +213,10 @@ class destination:
             result, resultText = (0,data)
         except ValueError, IndexError:
             result, resultText = (1,"Could not process request.")
+        except KeyError:
+            msg = "Requested stream `{}` does not exist.".format(stream)
+            self.logger.info(msg)
+            result, resultText = (1, msg)
         except:
             self.logger.exception("Exception in server code:")
             result, resultText = (1,"Could not process request.")
