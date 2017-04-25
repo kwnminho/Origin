@@ -122,7 +122,8 @@ class server:
 
         version, streamID = struct.unpack("!II",msg)
         print("successfully registered with streamID: {}, version: {}".format(streamID,version))
- 
+        socket.close() # I 'm pretty sure we need this here
+
         # error checking
         socket_data = context.socket(zmq.PUSH)
         socket_data.connect("tcp://%s:%s"%(host,msgport))

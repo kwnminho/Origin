@@ -27,6 +27,8 @@ data_types["uint16"] = { "mysql":"SMALLINT UNSIGNED", "numpy":"uint16", "format_
 data_types["float"] = { "mysql":"FLOAT", "numpy":"float32", "format_char":"f", "binary_allowed": True, "size": 4, "type": float }
 # 64b
 data_types["double"] = { "mysql":"DOUBLE", "numpy":"float64", "format_char":"d", "binary_allowed": True, "size": 8, "type": float}
+data_types["float64"] = data_types["double"]
+data_types["float32"] = data_types["float"]
 
 ### other types
 ### max string size is fixed for hdf5 files, if you want to change it change "S10" to "Sx"
