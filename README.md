@@ -13,25 +13,55 @@ Then the device can send data to the server for logging to the measurement port,
 
 The alert server ...
 
-## Install
+## Server Installation
+If you just want to connect to an existing server see below.
+
 
 ### Dependencies
 The default data storage is h5py.
 
 * python 2.7
 * [pyzmq](http://zeromq.org/bindings:python)
-* [h5py](http://docs.h5py.org/en/latest/build.html)
+
+You then need at least one of these backends
+* [h5py](http://docs.h5py.org/en/latest/build.html) (default)
 * [mysql.connector](http://cdn.mysql.com/Downloads/Connector-Python/mysql-connector-python-1.2.3.zip)
+* [pymongo](https://api.mongodb.com/python/current/)
+
 
 ```bash
-sudo apt-get install python-dev (if you haven't already)
+sudo apt-get install python-dev
 pip install pyzmq
+```
+Then at least one of the following, I recommend h5py:
+```bash
 pip install h5py
 pip install http://cdn.mysql.com/Downloads/Connector-Python/mysql-connector-python-1.2.3.zip
+pip install pymongo
 ```
 
 For windows check the recommended installation stuff on the packages website (or use canopy or a package manager).
-The pip install for mysql.connector worked fo rme on windows, and is probably the easiest way to do it.
+The pip install for mysql.connector worked for me on windows, and is probably the easiest way to do it.
+
+If you want to use `mysql` or `mongodb` then you will need to uncomment the import line out in `lib/origin/server/__init__.py`:
+```bash
+vim lib/origin/server/__init__.py
+```
+
+```python
+from origin_measurement_validation import measurement_validation
+
+from origin_template_validation import template_validation
+
+from origin_destination import destination
+
+
+# if you dont want to install these modules then just comment the ones you dont want to use
+from origin_hdf5_destination import hdf5_destination
+#from origin_mysql_destination import mysql_destination
+from origin_filesystem_destination import filesystem_destination # this one should be fine since its standard libs
+#from origin_mongodb_destination import mongodb_destination
+```
 
 ### OPTIONAL: Configure MySQL (only if you want to use it)
 
@@ -56,35 +86,54 @@ We now need to enter project specific information to the configuration file for 
 git clone http://github.com/QuantumQuadrate/Origin
 cd Origin
 git checkout dev
-vim lib/origin/origin_config.py
+vim config/origin-server-test.cfg
 ```
 
-The configuration file holds multiple configurations.
-To begin with we are just going to test the server locally so enter your information into the configuration object.
-The main configuration object `configSite` can be the same except change `origin_server` to the exposed ip address of the machine.
+To begin with we are just going to test the server locally so use the `config/origin-server-test.cfg` file, later when you want to connect to an actual server use the `config/origin-server.cfg` (or whatever you want).
 
 ```python
-configTest={
-  "origin_server"           : "127.0.0.1",
-  "origin_register_port"    : "5556",
-  "origin_measure_port"     : "5557", 
-  "origin_alert_port"       : "5558",
-  "origin_read_port"       : "5559",
-  "alert_check_period"      : "30",
-  "mysql_local_server"      : "127.0.0.1",
-  "mysql_local_db"          : "origintest",
-  "mysql_local_user"        : "test",
-  "mysql_local_password"    : "test",
-  #"mysql_remote_server":"",
-  #"mysql_remote_db":"",
-  #"mysql_remote_user":"",
-  #"mysql_remote_password":"",
-  "timestamp_type"  : "uint64",
-  "data_path"       : os.path.join(var_path,"data"),
-  "data_file"       : os.path.join(var_path,"data","origintest.hdf5"),
-  "hdf5_chunksize"  : 2**10, # for testing (make 1kB to 1MB)
-  "hdf5_compression"  : 'gzip', # False for no compression
-}
+[Server]
+ip                  = 127.0.0.1 ; change to origin server address for deployment
+register_port       = 5556
+measure_port        = 5557
+alert_port          = 5558
+read_port           = 5559
+json_register_port  = 5566
+json_measure_port   = 5567
+
+timestamp_type      = uint64
+
+# pick the back end you want to use
+destiniation        = hdf5
+#destiniation        = mysql
+#destiniation        = filesystem
+#destiniation        = mongodb
+
+alert_check_period  = 120 ; units of seconds
+
+[MySQL]
+server_ip = 127.0.0.1
+db        = origin_test
+user      = test
+password  = test
+
+[HDF5]
+data_path    = data
+data_file    = origin_test.hdf5
+chunksize    = 1024 ; 2**10 no exponents, import fails
+compression  = gzip ; False for no compression
+
+[FileSystem]
+data_path    = data/origin_test
+info_file    = knownStreams.json
+
+[MongoDB]
+server_ip = 127.0.0.1
+port      = 27017
+db        = origin_test
+# no SSL yet
+#user      = test
+#password  = test
 ```
 
 ### Run the server
