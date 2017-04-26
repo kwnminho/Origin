@@ -127,6 +127,7 @@ class hdf5_destination(destination):
             if (field != timestamp) and (self.knownStreamVersions[stream][field]['type'] == "string"):
                 measurements[field] = measurements[field].encode("ascii","ignore")
             dgroup[field+"_buffer"][row_count_buffer] = measurements[field]
+	self.hdf5_file.flush()
 
     # read stream data from storage between the timestamps given by time = [start,stop]
     # only takes timestamps in seconds

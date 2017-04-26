@@ -211,7 +211,7 @@ class destination:
                     min = np.nanmin(streamData[field])
                     data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
-        except ValueError, IndexError:
+        except (ValueError, IndexError):
             result, resultText = (1,"Could not process request.")
         except KeyError:
             msg = "Requested stream `{}` does not exist.".format(stream)
@@ -237,7 +237,7 @@ class destination:
             min = np.nanmin(fieldData[field])
             data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
-      except ValueError, IndexError:
+      except (ValueError, IndexError):
         result, resultText = (1,"Could not process request.")
       except KeyError:
         msg = "Requested stream `{}` does not exist.".format(stream)
