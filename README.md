@@ -85,7 +85,6 @@ We now need to enter project specific information to the configuration file for 
 ```bash
 git clone http://github.com/Orthogonal-Systems/Origin
 cd Origin
-git checkout dev
 vim config/origin-server-test.cfg
 ```
 
