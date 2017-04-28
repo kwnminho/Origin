@@ -80,7 +80,9 @@ class hdf5_destination(destination):
         )
         template = stream_obj['definition']
         for field in template:
-            dt = data_types[template[field]['type']]['numpy']
+            print template
+            print field
+            dt = data_types[template[field.strip()]['type']]['numpy']
             stream_ver.create_dataset(
                     field
                     , chunksize

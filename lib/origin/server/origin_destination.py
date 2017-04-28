@@ -69,13 +69,14 @@ class destination:
 
         definition = {}
         for i, key in enumerate(keyOrder):
-            definition[key] = {"type": template[key], "keyIndex": i}
+            k = key.strip()
+            definition[k] = {"type": template[k], "keyIndex": i}
 
         if version > 1:
             stream_obj = self.knownStreams[stream]
         else:
             stream_obj = { 
-                "stream"     : stream, 
+                "stream"     : stream.strip(), 
                 "id"         : streamID, 
                 "versions"   : []
             }
@@ -124,6 +125,7 @@ class destination:
     def registerStream(self,stream,template,keyOrder=None):
         update = False
         destVersion = None
+        stream = stream.strip()
         self.logger.info("Attempt to register stream %s"%(stream))
         if stream not in self.knownStreams.keys():
             update = True
@@ -272,6 +274,7 @@ class destination:
         print "\n"
         for stream in self.knownStreamVersions:
             print "\n", "="*20, " {} ".format(stream), "="*20
+            print "  StreamID: {}".format(self.knownStreams[stream]['id'])
             for field_name in self.knownStreamVersions[stream]:
                 print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name]['type'])
         print "\n"

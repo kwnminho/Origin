@@ -91,6 +91,7 @@ class MonServer(object):
     
   ## DATA HANDLER #######################################################
   def processDataMsg(self,msg,format='native'):
+    self.logger.debug('data msg recieved...')
     for m in msg:
       if m != '':
         self.processSingleDataMsg(m,format)
@@ -105,13 +106,15 @@ class MonServer(object):
     resultText = None
     fail = False
     binaryData = False
+    #print "format: ", format
 
     try:
       if format=='native':
+        binaryData = True
         streamID = struct.unpack("!I",msg[:4])[0]
         stream = self.dest.findStream(streamID)
+        self.logger.debug('data msg recieved, for stream '+stream)
         data = msg[4:] # remove first 4 bytes
-        binaryData = True
       elif format=='JSON':
         messageDecoded = json.loads(msg)
         stream = messageDecoded[0]
@@ -120,10 +123,14 @@ class MonServer(object):
         resultText = "Unrecognized data format `{}` specified".format(format)
         fail = True
 
-    except:
+    except Exception as e:
       result = 1
       resultText = "Failed to decode message from client"
       fail = True
+      print "Exception in user code:"
+      print '-'*60
+      traceback.print_exc(file=sys.stdout)
+      print '-'*60
 
     if not fail:
       if binaryData:
@@ -142,6 +149,8 @@ class MonServer(object):
           result,resultText = self.dest.measurement(stream,measurements)
 
     if result != 0:
+      if binaryData:
+        msg = ":".join("{:02x}".format(ord(c)) for c in msg)
       self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))
       
   ## REGISTRATION HANDLER ###############################################
@@ -168,7 +177,8 @@ class MonServer(object):
         recordDict = {}
         for entry in messageDecoded[1:]:
           key, dtype = entry.split(':')
-          recordDict[key] = dtype
+          key = key.strip()
+          recordDict[key] = dtype.strip()
           keyOrder.append(key)
 
       elif format=='JSON':

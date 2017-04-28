@@ -6,7 +6,8 @@ def template_validation(templateDest,templateReference):
     return False
   try: 
     for key in templateDest:
-      if templateDest[key] != templateReference[key]["type"]:
+      k = key.strip()
+      if templateDest[k] != templateReference[k]["type"]:
         return False
   except:
     return False
