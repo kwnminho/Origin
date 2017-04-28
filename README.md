@@ -83,9 +83,8 @@ FLUSH PRIVILEGES;
 We now need to enter project specific information to the configuration file for the server.
 
 ```bash
-git clone http://github.com/QuantumQuadrate/Origin
+git clone http://github.com/Orthogonal-Systems/Origin
 cd Origin
-git checkout dev
 vim config/origin-server-test.cfg
 ```
 
