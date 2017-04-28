@@ -82,7 +82,7 @@ class server:
     def ping(self):
         return True
 
-    def registerStream(self,stream,records,keyOrder=None,format=None):
+    def registerStream(self,stream,records,keyOrder=None,format=None,timeout=1000):
         valid = validateStreamDeclaration(stream,records)
 
         if valid != 0:
@@ -97,6 +97,8 @@ class server:
 
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
+        socket.setsockopt(zmq.RCVTIMEO,timeout)
+	socket.setsockopt(zmq.LINGER,0)  
         host = self.config.get('Server',"ip")
         socket.connect ("tcp://%s:%s" % (host,port))
 
@@ -110,9 +112,14 @@ class server:
             print "can't format stream into {}".format(format)
             return None
 
-        socket.send(registerComm)
-        confirmation = socket.recv()
-        returnCode, msg = confirmation.split(',',1)
+	socket.send(registerComm,zmq.NOBLOCK)
+        try:
+	   confirmation = socket.recv()
+	except: 
+	   print("Problem registering stream: {}".format(stream))
+           print("Server did not respond in time")
+           exit(1)
+	returnCode, msg = confirmation.split(',',1)
         print returnCode, msg
 
         if int(returnCode) != 0:
