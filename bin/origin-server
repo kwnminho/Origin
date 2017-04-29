@@ -58,7 +58,7 @@ http://learning-0mq-with-pyzmq.readthedocs.org/en/latest/pyzmq/multisocket/torna
 """
 
 class MonServer(object):
-  def __init__(self,logger,config):
+  def __init__(self,logger,config,context):
     self.logger = logger
     self.streamfile = ""
     self.state = "UNKNOWN"
@@ -88,10 +88,18 @@ class MonServer(object):
     else:
         print "Unrecognized destination %s specified"%(dest)
         sys.exit(1)
+
+    # the publish socket does not use the event system that eveything else uses
+    # I cant assign a class method to it, so it is defined here instead
+    pub_addr = "tcp://*"
+    pub_port = config.getint("Server","pub_port")
+    self.pub_socket = context.socket(zmq.PUB)
+    self.pub_socket.bind("%s:%s" % (pub_addr,pub_port))
+
     
   ## DATA HANDLER #######################################################
   def processDataMsg(self,msg,format='native'):
-    self.logger.info('data msg recieved...')
+    #self.logger.info('data msg recieved...')
     for m in msg:
       if m != '':
         self.processSingleDataMsg(m,format)
@@ -134,7 +142,7 @@ class MonServer(object):
 
     if not fail:
       if binaryData:
-        result, resultText = self.dest.measurementBinary(stream,data)
+        result, resultText, meas = self.dest.measurementBinary(stream,data)
 
       else:
         if len(messageDecoded) != 3:
@@ -146,12 +154,14 @@ class MonServer(object):
         else:
           recordTime = messageDecoded[1]
           measurements = messageDecoded[2]
-          result,resultText = self.dest.measurement(stream,measurements)
+          result, resultText, meas = self.dest.measurement(stream,measurements)
 
     if result != 0:
       if binaryData:
         msg = ":".join("{:02x}".format(ord(c)) for c in msg)
       self.logger.warn("Got a message I can't do anything with. Error: %s Message: %s"%(resultText,msg))
+    else:
+      self.publish(streamID, meas)
       
   ## REGISTRATION HANDLER ###############################################
   def registerStream(self, reg_stream, msg, format='native'):
@@ -245,7 +255,7 @@ class MonServer(object):
     # if msg is an empty JSON object then send back the list of known streams
     # this is used for subscriptions
     if msg == '{}':
-        result, resultText = (0, dict(streams=self.dest.knownStreamVersions))
+        result, resultText = (0, dict(streams=self.dest.knownStreams))
         returnMessage = (result,resultText)
         read_stream.send(json.dumps(returnMessage))
         return
@@ -301,7 +311,13 @@ class MonServer(object):
     finally:
       returnMessage = (result,resultText)
       read_stream.send(json.dumps(returnMessage))
-      
+
+    ## STREAMING PUBLISHER #################################################
+  def publish(self, streamID, data):
+    msg = [b"{0:04d}".format(streamID), json.dumps(data)]
+    self.logger.debug("Sending data: " + str(msg))
+    self.pub_socket.send_multipart(msg)
+
 
 def main():
   if not os.path.exists(fullVarPath):
@@ -338,9 +354,6 @@ def main():
   logger.addHandler(fLog)  
   logger.info("Successfully Started Logging")
 
-  # Setup Server
-  mon = MonServer(logger,config)
-  
   reg_addr = "tcp://*"
   reg_port = config.getint("Server","register_port")
 
@@ -362,6 +375,9 @@ def main():
   update_period = config.getint("Server","alert_check_period")*1e3
 
   context = zmq.Context.instance()
+  
+  # Setup Server
+  mon = MonServer(logger,config,context)
   
   # NATIVE FORMAT ######################################################
   reg_socket = context.socket(zmq.REP)

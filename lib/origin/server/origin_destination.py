@@ -166,7 +166,7 @@ class destination:
         self.insertMeasurement(stream,measurements)
         result = 0
         resultText = ""
-        return (result,resultText)
+        return (result,resultText,measurements)
 
     def measurementOrdered(self,stream,ts,measurements):
         meas = {}
