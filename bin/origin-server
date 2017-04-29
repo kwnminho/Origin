@@ -91,7 +91,7 @@ class MonServer(object):
     
   ## DATA HANDLER #######################################################
   def processDataMsg(self,msg,format='native'):
-    self.logger.debug('data msg recieved...')
+    self.logger.info('data msg recieved...')
     for m in msg:
       if m != '':
         self.processSingleDataMsg(m,format)

@@ -1,5 +1,6 @@
 import json
 import sys
+import zmq
 from origin import data_types, timestamp
 import struct
 import ctypes
@@ -33,6 +34,9 @@ class server_connection:
         self.records = records
         self.context = context
         self.socket = socket
+
+        self.socket.setsockopt(zmq.SNDTIMEO,2000)
+
         if keyOrder is None:
             self.format_string, self.data_size = (None, None)
         else:
@@ -48,7 +52,11 @@ class server_connection:
         if self.format is None:
             for k in self.keyOrder:
                 msgData.append(kwargs[k])
-            self.socket.send( self.formatRecord(msgData) )
+            try:
+                self.socket.send(self.formatRecord(msgData), zmq.NOBLOCK)
+    	    except:
+		print("Connection to Server Failed")
+		exit(1) 
         elif self.format == "json":
 	    msgData[0] = self.stream
             msgMap = {}
@@ -56,8 +64,11 @@ class server_connection:
                 if k != timestamp:
                     msgMap[k] = kwargs[k]
             msgData.append(msgMap)
-            self.socket.send(json.dumps(msgData))
-
+            try: 
+            	self.socket.send(json.dumps(msgData),zmq.NOBLOCK)
+    	    except:
+		print("Connection to Server Failed")
+                exit(1)
     def close(self):
         print "closing socket"
         self.socket.close()
