@@ -214,14 +214,16 @@ class destination:
                     data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
         except (ValueError, IndexError):
-            result, resultText = (1,"Could not process request.")
+            msg = "Could not process request."
+            result, resultText = (1, dict(streams=self.knownStreams, error=msg))
         except KeyError:
             msg = "Requested stream `{}` does not exist.".format(stream)
             self.logger.info(msg)
-            result, resultText = (1, msg)
+            result, resultText = (1, dict(streams=self.knownStreams, error=msg))
         except:
             self.logger.exception("Exception in server code:")
-            result, resultText = (1,"Could not process request.")
+            msg = "Could not process request."
+            result, resultText = (1, dict(streams=self.knownStreams, error=msg))
         finally:
             return (result,resultText)
 
@@ -240,14 +242,16 @@ class destination:
             data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
       except (ValueError, IndexError):
-        result, resultText = (1,"Could not process request.")
+        msg = "Could not process request."
+        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
       except KeyError:
         msg = "Requested stream `{}` does not exist.".format(stream)
         self.logger.info(msg)
-        result, resultText = (1, msg)
+        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
       except:
         self.logger.exception("Exception in server code:")
-        result, resultText = (1,"Could not process request.")
+        msg = "Could not process request."
+        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
       finally:
         return (result,resultText)
 

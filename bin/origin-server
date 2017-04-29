@@ -242,15 +242,23 @@ class MonServer(object):
         self.processSingleReadMsg(read_stream,m)
 
   def processSingleReadMsg(self, read_stream, msg):
+    # if msg is an empty JSON object then send back the list of known streams
+    # this is used for subscriptions
+    if msg == '{}':
+        result, resultText = (0, dict(streams=self.dest.knownStreamVersions))
+        returnMessage = (result,resultText)
+        read_stream.send(json.dumps(returnMessage))
+        return
+
     try:
       request_obj = json.loads(msg)
       stream = request_obj['stream'].strip()
     except ValueError:
       result = 1
-      resultText = "Failed to decode request"
+      resultText = dict(streams=self.dest.knownStreams, error="Failed to decode request.")
     except KeyError:
       result = 1
-      resultText = "Request did not have stream property."
+      resultText = dict(streams=self.dest.knownStreams, error="Request did not have stream property.")
     else:
       if 'start' in request_obj:
         start = request_obj['start']
@@ -277,10 +285,18 @@ class MonServer(object):
             result, resultText = (0,self.dest.getRawStreamData(stream,start,stop))
           else:
             result, resultText = self.dest.getStatStreamData(stream,start,stop)
+
+      except KeyError: # probably undefined stream
+        msg = "Requested stream `{}` does not exist.".format(stream)
+        self.logger.info(msg)
+        result, resultText = (1, dict(streams=self.dest.knownStreams, error=msg))
+
       except:
         self.logger.error("Unexpected exception in read message code:")
         self.logger.error(traceback.print_exc(file=sys.stdout))
-        result, resultText = (1, "Server encountered an error.")
+        # return a list of valid options for the read
+        resp = dict(streams=self.dest.knownStreams, error="Server encountered an error.")
+        result, resultText = (1, resp)
 
     finally:
       returnMessage = (result,resultText)
