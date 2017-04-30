@@ -194,7 +194,8 @@ class destination:
         
     # read stream.field data from storage between the timestamps given by time = [start,stop]
     def getRawStreamFieldData(self,stream,field,start=None,stop=None):
-        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) # send dummy dict with single field
+        # send dummy dict with single field
+        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) 
 
     # get statistics on the stream data during the time window time = [start, stop]
     def getStatStreamData(self,stream,start=None,stop=None):
@@ -214,8 +215,8 @@ class destination:
                     data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
         except (ValueError, IndexError):
-            msg = "Could not process request."
-            result, resultText = (1, dict(streams=self.knownStreams, error=msg))
+            msg = "No data in requested time window."
+            result, resultText = (1, dict(error=msg))
         except KeyError:
             msg = "Requested stream `{}` does not exist.".format(stream)
             self.logger.info(msg)
@@ -242,10 +243,14 @@ class destination:
             data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
       except (ValueError, IndexError):
-        msg = "Could not process request."
-        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
+        msg = "No data in requested time window."
+        result, resultText = (1, dict(error=msg))
       except KeyError:
         msg = "Requested stream `{}` does not exist.".format(stream)
+        self.logger.info(msg)
+        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
+      except NotImplementedError:
+        msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
         self.logger.info(msg)
         result, resultText = (1, dict(streams=self.knownStreams, error=msg))
       except:

@@ -301,6 +301,15 @@ class MonServer(object):
         self.logger.info(msg)
         result, resultText = (1, dict(streams=self.dest.knownStreams, error=msg))
 
+      except NotImplementedError: # I am using this to catch an undefined field error
+        msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
+        self.logger.info(msg)
+        result, resultText = (1, dict(streams=self.dest.knownStreams, error=msg))
+
+      except IndexError: # no data in time window
+        msg = "No data in requested time window."
+        result, resultText = (1, dict(error=msg))
+
       except:
         self.logger.error("Unexpected exception in read message code:")
         self.logger.error(traceback.print_exc(file=sys.stdout))

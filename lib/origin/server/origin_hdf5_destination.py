@@ -137,7 +137,11 @@ class hdf5_destination(destination):
         start, stop = self.validateTimeRange(start,stop)
         self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
         # get data from buffer
-        stream_group = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
+        try:
+            stream_group = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
+        except KeyError:
+            raise KeyError
+
         if definition is None:
             definition = self.knownStreamVersions[stream]
 
@@ -147,11 +151,15 @@ class hdf5_destination(destination):
                 'pointer': stream_group.attrs['row_count_buffer'] # pointer in ring buffer
                 ,'array':  stream_group[timestamp + '_buffer']
         }
-        for field in definition:
-            raw_data[field] = { 
+        try:
+            for field in definition:
+                raw_data[field] = { 
                     'pointer': stream_group.attrs['row_count_buffer'] # pointer in ring buffer
                     ,'array':  stream_group[field + '_buffer']
-            }
+                }
+        except KeyError:
+            # use this error to differentiate between a stream error and a field error
+            raise NotImplementedError # I am a shitty person and I know it
 
         # correct the ring buffer order to linear
         pointer = raw_data[timestamp]['pointer']+1
