@@ -280,13 +280,16 @@ class destination:
             return (start, stop)
 
     def print_stream_info(self):
-        print "\n"
         for stream in self.knownStreamVersions:
-            print "\n", "="*20, " {} ".format(stream), "="*20
-            print "  StreamID: {}".format(self.knownStreams[stream]['id'])
+            self.logger.info("")
+            self.logger.info("="*20 + " {} ".format(stream) + "="*20)
+            self.logger.info("  StreamID: {}".format(self.knownStreams[stream]['id']))
             for field_name in self.knownStreamVersions[stream]:
-                print "  Field: %s (%s)"%(field_name,self.knownStreamVersions[stream][field_name]['type'])
-        print "\n"
+                self.logger.info("  Field: {} ({})".format(
+                    field_name, 
+                    self.knownStreamVersions[stream][field_name]['type'])
+                )
+        self.logger.info("")
 
     def get_streamID(self,stream):
         if stream in self.knownStreams:

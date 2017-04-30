@@ -2,14 +2,11 @@
 
 import sys, traceback
 import os
-print os.getcwd()
-print sys.argv[0]
 fullBinPath  = os.path.abspath(os.path.join(os.getcwd(), sys.argv[0]))
 fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
 fullLibPath  = os.path.join(fullBasePath, "lib")
 fullVarPath  = os.path.join(fullBasePath, "var")
 fullCfgPath  = os.path.join(fullBasePath, "config")
-print fullLibPath
 sys.path.append(fullLibPath)
 
 import origin
@@ -82,11 +79,11 @@ class MonServer(object):
         self.dest = mongodb_destination(logger,config)
 
     elif dest == '':
-        print "No destination specified in configs"
+        logger.critical("No destination specified in configs. Killing server...")
         sys.exit(1)
         
     else:
-        print "Unrecognized destination %s specified"%(dest)
+        logger.critical("Unrecognized destination {} specified. Killing server...".format(dest))
         sys.exit(1)
 
     # the publish socket does not use the event system that eveything else uses
@@ -114,7 +111,6 @@ class MonServer(object):
     resultText = None
     fail = False
     binaryData = False
-    #print "format: ", format
 
     try:
       if format=='native':
@@ -135,10 +131,7 @@ class MonServer(object):
       result = 1
       resultText = "Failed to decode message from client"
       fail = True
-      print "Exception in user code:"
-      print '-'*60
-      traceback.print_exc(file=sys.stdout)
-      print '-'*60
+      self.logger.exception("Exception in user code.")
 
     if not fail:
       if binaryData:
@@ -362,6 +355,9 @@ def main():
   fLog.setFormatter(formatter)
   logger.addHandler(fLog)  
   logger.info("Successfully Started Logging")
+
+  logger.info("Current directory: {}".format(os.getcwd()))
+  logger.info("Origin library path: {}".format(fullLibPath))
 
   reg_addr = "tcp://*"
   reg_port = config.getint("Server","register_port")

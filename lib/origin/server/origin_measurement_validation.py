@@ -10,7 +10,7 @@ def measurement_validation(measurement,template):
     tk = template.keys()
     tk.sort()
     if mk != tk:
-        print("mkey != tkey")
+        logger.error("Measurement validation error: mkey != tkey")
         return False
 
     for fieldName in measurement.keys():
@@ -20,7 +20,8 @@ def measurement_validation(measurement,template):
             # try to cast data as the expected type
             data_types[fieldTypeName]["type"](measurement[fieldName])
         except:
-            print "Data: {} is not of type: {}".format(measurement[fieldName], data_types[fieldTypeName["type"]])
+            msg = "Data: {} is not of type: {}"
+            logger.error(msg.format(measurement[fieldName], data_types[fieldTypeName["type"]]))
             return False
     return True
             
