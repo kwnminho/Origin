@@ -122,6 +122,7 @@ class MonServer(object):
       elif format=='JSON':
         messageDecoded = json.loads(msg)
         stream = messageDecoded[0]
+        streamID = self.dest.knownStreams[stream]["id"]
       else:
         result = 1
         resultText = "Unrecognized data format `{}` specified".format(format)
@@ -303,9 +304,8 @@ class MonServer(object):
         msg = "No data in requested time window."
         result, resultText = (1, dict(error=msg))
 
-      except:
-        self.logger.error("Unexpected exception in read message code:")
-        self.logger.error(traceback.print_exc(file=sys.stdout))
+      except Exception:
+        self.logger.exception("Unexpected exception in read message code:")
         # return a list of valid options for the read
         resp = dict(streams=self.dest.knownStreams, error="Server encountered an error.")
         result, resultText = (1, resp)

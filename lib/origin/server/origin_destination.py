@@ -208,10 +208,13 @@ class destination:
                 elif self.knownStreamVersions[stream][field]['type'] == 'string':
                     data[field] = streamData[field] # TODO: figure out how to handle this
                 else:
+                    # some stats need to be converted back to the native python type for JSON serialization 
+                    # (this was ok befor eI am not sure why it breaks now, maybe its a windows thing)
+                    dtype = data_types[self.knownStreamVersions[stream][field]['type']]["type"]
                     avg = np.nanmean(streamData[field])
                     std = np.nanstd(streamData[field])
-                    max = np.nanmax(streamData[field])
-                    min = np.nanmin(streamData[field])
+                    max = dtype(np.nanmax(streamData[field]))
+                    min = dtype(np.nanmin(streamData[field]))
                     data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
             result, resultText = (0,data)
         except (ValueError, IndexError):
@@ -236,10 +239,13 @@ class destination:
         if self.knownStreamVersions[stream][field]['type'] == 'string':
             data[field] = fieldData[field] # TODO: figure out how to handle this
         else:
+            # some stats need to be converted back to the native python type for JSON serialization 
+            # (this was ok before I am not sure why it breaks now, maybe its a windows thing)
+            dtype = data_types[self.knownStreamVersions[stream][field]['type']]["type"]
             avg = np.nanmean(fieldData[field])
             std = np.nanstd(fieldData[field])
-            max = np.nanmax(fieldData[field])
-            min = np.nanmin(fieldData[field])
+            max = dtype(np.nanmax(fieldData[field]))
+            min = dtype(np.nanmin(fieldData[field]))
             data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
         result, resultText = (0,data)
       except (ValueError, IndexError):
