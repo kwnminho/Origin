@@ -1,7 +1,7 @@
 import json
 import sys
 import zmq
-from origin import data_types, timestamp
+from origin import data_types, TIMESTAMP
 import struct
 import ctypes
 
@@ -45,7 +45,7 @@ class server_connection:
     def send(self,**kwargs):
         msgData = [ self.streamID ]
         try:
-            msgData.append(kwargs[timestamp])
+            msgData.append(kwargs[TIMESTAMP])
         except KeyError:
             #print "No timestamp specified, server will timestamp on arrival"
             msgData.append(0)
@@ -61,7 +61,7 @@ class server_connection:
 	    msgData[0] = self.stream
             msgMap = {}
             for k in kwargs.keys():
-                if k != timestamp:
+                if k != TIMESTAMP:
                     msgMap[k] = kwargs[k]
             msgData.append(msgMap)
             try: 

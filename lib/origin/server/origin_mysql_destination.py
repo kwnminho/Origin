@@ -1,18 +1,26 @@
-import mysql.connector
-from origin.server import destination
-from origin import data_types, timestamp
-import ConfigParser
+"""
+This module extends the Destination class to work with a MySQL database.
+"""
 
-class mysql_destination(destination):
+import mysql.connector
+from origin.server import Destination
+from origin import data_types, timestamp
+
+
+class MySQLDestination(Destination):
+    '''A class for storing data in a MySQL database.'''
+
     def connect(self):
-        self.cnx = mysql.connector.connect(user=self.config.get("MySQL","user"),
-                                           password=self.config.get("MySQL","password"),
-                                           host=self.config.get("MySQL","server_ip"),
-                                           database=self.config.get("MySQL","db"))
+        self.cnx = mysql.connector.connect(
+            user=self.config.get("MySQL", "user"),
+            password=self.config.get("MySQL", "password"),
+            host=self.config.get("MySQL", "server_ip"),
+            database=self.config.get("MySQL", "db")
+        )
         self.cursor = self.cnx.cursor()
 
-    def readStreamDefTable(self):
-        streamCreation = (
+    def read_stream_def_table(self):
+        stream_creation = (
             "CREATE TABLE IF NOT EXISTS origin_streams ( "
             " id INT NOT NULL AUTO_INCREMENT,"
             " name varchar(1024),"
@@ -21,7 +29,7 @@ class mysql_destination(destination):
             " ) "
         )
 
-        streamFieldCreation = (
+        stream_field_creation = (
             "CREATE TABLE IF NOT EXISTS "
             " origin_stream_fields (  "
             " stream_name varchar(1024), "
@@ -33,139 +41,149 @@ class mysql_destination(destination):
         )
 
         cursor = self.cursor
-        cursor.execute(streamCreation)
-        cursor.execute(streamFieldCreation)
+        cursor.execute(stream_creation)
+        cursor.execute(stream_field_creation)
 
         # no json object to read, so we need to build from data
         # could change to store data in a json blob later
-        currentStreamVersions= []
+        current_stream_versions = []
         query = "SELECT id,name,version from origin_streams"
         cursor.execute(query)
-        for id,name,version in cursor:
-            currentStreamVersions.append((id,name,version))
+        for id, name, version in cursor:
+            current_stream_versions.append((id, name, version))
 
-        knownStreamVersions = {}
-        knownStreams = {}
+        known_stream_versions = {}
+        known_streams = {}
 
-        for id,name,version in currentStreamVersions:
-            query = "SELECT field_name,field_type,keyIndex FROM origin_stream_fields WHERE stream_name=\"%s\" and version=%d"%(name,version)
+        for id, name, version in current_stream_versions:
+            query = """SELECT field_name,field_type,key_index 
+            FROM origin_stream_fields 
+            WHERE stream_name=\"%s\" and version=%d"%(name,version)
+            """
             cursor.execute(query)
 
             definition = {}
-            for field_name,field_type,keyIndex in cursor:
-                definition[field_name] = {"type":field_type, "keyIndex":keyIndex}
+            for field_name, field_type, key_index in cursor:
+                definition[field_name] = {"type":field_type, "key_index":key_index}
 
-            knownStreamVersions[name] = definition
-            # generate keyOrder this should probably be nicer
-            keyOrder = [None] * len(knownStreamVersions[name])
+            known_stream_versions[name] = definition
+            # generate key_order this should probably be nicer
+            key_order = [None] * len(known_stream_versions[name])
             template = {}
             for key in definition:
-                keyOrder[definition[key]["keyIndex"]] = key
+                key_order[definition[key]["key_index"]] = key
                 template[key] = definition[key]["type"]
 
-            err, formatStr = self.formatString(template,keyOrder)
+            err, format_str = self.format_string(template, key_order)
             if err > 0:
-                formatStr = ''
+                format_str = ''
 
-            knownStreams[name] = { # not including older versions since it is hard right now
-                    "stream"     : name,
-                    "id"         : id, 
-                    "version"    : version, 
-                    "keyOrder"   : keyOrder, 
-                    "formatStr"  : formatStr,
-                    "definition" : definition,
-                    "versions"   : []
+            known_streams[name] = { # not including older versions since it is hard right now
+                "stream"     : name,
+                "id"         : id, 
+                "version"    : version, 
+                "key_order"   : key_order, 
+                "format_str"  : format_str,
+                "definition" : definition,
+                "versions"   : []
             }
             
-        self.knownStreamVersions = knownStreamVersions
-        self.knownStreams = knownStreams
+        self.known_stream_versions = known_stream_versions
+        self.known_streams = known_streams
         self.print_stream_info()
         self.cnx.commit()
 
-    def createNewStreamDestination(self,stream_obj):
+    def create_new_stream_destination(self, stream_obj):
         cursor = self.cursor
         stream = stream_obj["stream"]
         version = stream_obj["version"]
 
         if version == 1:
-            query = "INSERT INTO origin_streams (name, version) VALUES (\"%s\",%d)"%(stream,version)
+            query = """INSERT INTO origin_streams (name, version) VALUES (\"{}\",{})"""
+            query = query.format(stream, version)
         else:
-            query = "UPDATE origin_streams SET version=%d WHERE name=\"%s\""%(version,stream) 
+            query = "UPDATE origin_streams SET version={} WHERE name=\"{}\""
+            query = query.format(version, stream) 
         cursor.execute(query)
         #streamID = cursor.lastrowid #this doesn't seem to work with update, even though it should
-        cursor.execute("SELECT id FROM origin_streams WHERE name=\"%s\" LIMIT 1"%(stream))
-        streamID = cursor.fetchone()[0]
+        cursor.execute("SELECT id FROM origin_streams WHERE name=\"{}\" LIMIT 1".format(stream))
+        stream_id = cursor.fetchone()[0]
         # overwrite streamID using the correct one
-        self.knownStreams[stream]['id'] = streamID
+        self.known_streams[stream]['id'] = stream_id
 
         fields = []
         definition = stream_obj['definition']
-        for fieldName in definition.keys():
+        for field_name in definition.keys():
             idx = None
-            fieldType = definition[fieldName]['type']
-            idx = definition[fieldName]['keyIndex']
+            field_type = definition[field_name]['type']
+            idx = definition[field_name]['keyIndex']
             try:
-                fields.append( (fieldName, data_types[fieldType]["mysql"]) )
+                fields.append((field_name, data_types[field_type]["mysql"]))
             except KeyError:
                 pass
 
             query = """INSERT INTO origin_stream_fields 
-                    VALUES ("%s","%s",%d,"%s",%d)"""%(stream,fieldName,version,fieldType,idx)
-            cursor.execute(query)
+                    VALUES ("{}","{}",{},"{}",{})"""
+            cursor.execute(query.format(stream, field_name, version, field_type, idx))
 
-        query = "CREATE TABLE IF NOT EXISTS measurements_%s_%d (id BIGINT NOT NULL AUTO_INCREMENT,%s "%(stream,version, timestamp)
+        query = """CREATE TABLE IF NOT EXISTS measurements_{}_{} 
+                (id BIGINT NOT NULL AUTO_INCREMENT,{} """
+        query.format(stream, version, timestamp)
         try:
-            query += data_types[self.config.get("Server","timestamp_type")]["mysql"]
+            query += data_types[self.config.get("Server", "timestamp_type")]["mysql"]
         except KeyError:
             query += "INT UNSIGNED"
         query += ","
 
 
-        for i in range(0,len(fields)):
-            query = query + "%s %s,"%fields[i]
-        query = query + "PRIMARY KEY (id))"
+        for i in range(0, len(fields)):
+            f0, f1 = fields[i]
+            query += "{} {},".format(f0, f1)
+        query += "PRIMARY KEY (id))"
         cursor.execute(query)
-        query = "DROP VIEW IF EXISTS measurements_%s "%(stream)
+        query = "DROP VIEW IF EXISTS measurements_{} ".format(stream)
         cursor.execute(query)
-        query = "CREATE VIEW measurements_%s AS select * from measurements_%s_%d"%(stream,stream,version)
+        query = """CREATE VIEW measurements_{} 
+                AS SELECT * FROM measurements_{}_{}""".format(stream, stream, version)
         cursor.execute(query)
         self.cnx.commit()
-        return streamID
+        return stream_id
 
-    def insertMeasurement(self,stream,measurements):
-        measurementArray = []
+    def insert_measurement(self, stream, measurements):
+        measurement_array = []
         keys = measurements.keys()
         keys.sort()
         for k in keys:
-            measurementArray.append((k,measurements[k]))
+            measurement_array.append((k, measurements[k]))
 
         fmt = ["("]
         values = []
-        for entry in measurementArray:
-            fmt += [entry[0],',']
+        for entry in measurement_array:
+            fmt += [entry[0], ',']
             values.append(entry[1])
-        fmt[-1] =  ")"
-        valuePlaceholders = "(" + ','.join(["%s"]*len(measurementArray)) + ")"
+        fmt[-1] = ")"
+        value_placeholders = "(" + ','.join(["%s"]*len(measurement_array)) + ")"
 
-        version = self.knownStreams[stream]["version"]
-        query = "INSERT INTO measurements_%s_%d %s VALUES %s"%(stream,version,''.join(fmt),valuePlaceholders)
+        version = self.known_streams[stream]["version"]
+        query = """INSERT INTO measurements_%s_%d %s VALUES %s"""
+        query = query.format(stream, version, ''.join(fmt), value_placeholders)
 
-        self.cursor.execute(query,values)
+        self.cursor.execute(query, values)
         self.cnx.commit()
 
     # read stream data from storage between the timestamps given by time = [start,stop]
-    def getRawStreamData(self,stream,start=None,stop=None,definition=None):
-        start, stop = self.validateTimeRange(start,stop)
+    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+        start, stop = self.validate_time_range(start, stop)
 
         if definition is None:
-            definition = self.knownStreamVersions[stream]
+            definition = self.known_stream_versions[stream]
         
-        fieldList = [ field for field in definition ]
+        field_list = [field for field in definition]
         query = "SELECT %s FROM measurements_%s_%d WHERE %s BETWEEN %d AND %d"
         values = (
-            ",".join(fieldList),
+            ",".join(field_list),
             stream, 
-            self.knownStreams[stream]["version"], 
+            self.known_streams[stream]["version"], 
             timestamp, 
             start, 
             stop
@@ -174,11 +192,11 @@ class mysql_destination(destination):
         self.cursor.execute(query % values)
 
         data = {}
-        for field in fieldList:
+        for field in field_list:
             data[field] = []
 
         for row in self.cursor.fetchall():
-            for i, field in enumerate(fieldList):
+            for i, field in enumerate(field_list):
                 data[field].append(row[i])
 
         return data

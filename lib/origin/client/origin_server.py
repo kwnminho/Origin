@@ -98,7 +98,7 @@ class server:
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
         socket.setsockopt(zmq.RCVTIMEO,timeout)
-	socket.setsockopt(zmq.LINGER,0)  
+        socket.setsockopt(zmq.LINGER,0)  
         host = self.config.get('Server',"ip")
         socket.connect ("tcp://%s:%s" % (host,port))
 
@@ -112,14 +112,14 @@ class server:
             print "can't format stream into {}".format(format)
             return None
 
-	socket.send(registerComm,zmq.NOBLOCK)
+        socket.send(registerComm,zmq.NOBLOCK)
         try:
-	   confirmation = socket.recv()
-	except: 
-	   print("Problem registering stream: {}".format(stream))
-           print("Server did not respond in time")
-           exit(1)
-	returnCode, msg = confirmation.split(',',1)
+            confirmation = socket.recv()
+        except: 
+            print("Problem registering stream: {}".format(stream))
+            print("Server did not respond in time")
+            exit(1)
+        returnCode, msg = confirmation.split(',',1)
         print returnCode, msg
 
         if int(returnCode) != 0:
@@ -127,7 +127,7 @@ class server:
             print msg
             return None
 
-        version, streamID = struct.unpack("!II",msg)
+        streamID, version = struct.unpack("!II",msg)
         print("successfully registered with streamID: {}, version: {}".format(streamID,version))
         socket.close() # I 'm pretty sure we need this here
 

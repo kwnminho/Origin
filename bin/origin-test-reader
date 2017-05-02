@@ -15,7 +15,6 @@ fullCfgPath  = os.path.join(fullBasePath, "config")
 sys.path.append(fullLibPath)
 
 from origin.client import server, random_data
-from origin import current_time, timestamp
 
 if len(sys.argv) > 1:
   if sys.argv[1] == 'test':

@@ -1,10 +1,17 @@
-from origin.server import template_validation
-from origin.server import measurement_validation
-from origin import data_types, current_time, timestamp
+"""
+This module provides the Destination class that holds all the basic API methods for interfacing
+with a destination. 
+
+Destintations are databases, filesystems, specific file formats (HDF5, CSV), etc.
+"""
 
 import struct
 import numpy as np
-import sys
+
+
+from origin.server import template_validation
+from origin.server import measurement_validation
+from origin import data_types, current_time, TIMESTAMP
 
 ################################################################################
 #
@@ -13,13 +20,13 @@ import sys
 #   knownStreams : {
 #       `stream name` : {
 #           stream     : `stream_name`,
-#           id         : `streamID`,
+#           id         : `stream_id`,
 #           version    : `version`,
-#           keyOrder   : `keyOrder`,
-#           formatStr  : `formatStr`,
+#           key_order  : `key_order`,
+#           format_str : `format_str`,
 #           definition : { # most recent definition object
-#               `field1` : { "type":data_type, "keyIndex": `index` },
-#               `field2` : { "type":data_type, "keyIndex": `index` },
+#               `field1` : { "type":data_type, "key_index": `index` },
+#               `field2` : { "type":data_type, "key_index": `index` },
 #               ...
 #           }
 #           versions    : { # optional dict of older versions, version number is the hash
@@ -41,232 +48,302 @@ import sys
 ################################################################################
 
 
-class destination:
-    def __init__(self,logger,config):
+class Destination(object):
+    '''A class representing a data storage location, such as a database, filesystem,
+    or file format.
+
+    This class defines a common API that a real destination class must inherit from.
+    Destination specific methods that are required will raise a NotImplementedError if not
+    overridden.
+    '''
+
+    def __init__(self, logger, config):
         self.logger = logger
         self.config = config
-        self.connect()
-        self.readStreamDefTable()
+        self.known_streams = {}
+        self.known_stream_versions = {}
 
-    # connect/open (w/e) database/file
+        self.connect()
+        self.read_stream_def_table()
+
     def connect(self):
+        '''connect/open (w/e) database/file'''
         raise NotImplementedError
 
-    # reads stored metadata and fills into the knownStreams, and knownStreamVersions dictionaries
-    def readStreamDefTable(self):
+    def read_stream_def_table(self):
+        '''reads stored metadata and fills into the knownStreams, and 
+        knownStreamVersions dictionaries
+        '''
         raise NotImplementedError
     
-    # creates a new stream or creates a new version of a stream based on template. 
-    # also enters formatStr into the knownStreams dict
-    # return streamID
-    def createNewStream(self,stream,version,template,keyOrder):
-        # generate formatStr for stream if possible, strings are not supported in binary
+    def create_new_stream(self, stream, version, template, key_order):
+        '''Creates a new stream or creates a new version of a stream based on template.
+        also enters format_str into the knownStreams dict.
+        return streamID
+        '''
+
+        # generate format_str for stream if possible, strings are not supported in binary
         # do early to trigger exception before write to disk
-        err, formatStr = self.formatString(template,keyOrder)
+        err, format_str = self.format_string(template, key_order)
         if err > 0:
-            formatStr = ''
-        streamID = self.get_streamID(stream)
+            format_str = ''
+        stream_id = self.get_stream_id(stream)
 
         definition = {}
-        for i, key in enumerate(keyOrder):
+        for i, key in enumerate(key_order):
             k = key.strip()
-            definition[k] = {"type": template[k], "keyIndex": i}
+            definition[k] = {"type": template[k], "key_index": i}
 
         if version > 1:
-            stream_obj = self.knownStreams[stream]
+            stream_obj = self.known_streams[stream]
         else:
             stream_obj = { 
                 "stream"     : stream.strip(), 
-                "id"         : streamID, 
+                "id"         : stream_id, 
                 "versions"   : []
             }
 
         stream_obj["version"] = version
-        stream_obj["keyOrder"] = keyOrder 
-        stream_obj["formatStr"] = formatStr
+        stream_obj["key_order"] = key_order 
+        stream_obj["format_str"] = format_str
         stream_obj["definition"] = definition
         stream_obj["versions"].append({
             "version"    : version, 
-            "keyOrder"   : keyOrder,
-            "formatStr"  : formatStr,
+            "key_order"   : key_order,
+            "format_str"  : format_str,
             "definition" : definition,
         })
 
         # update the stream inventory
-        self.knownStreams[stream] = stream_obj
-        self.knownStreamVersions[stream] = stream_obj['definition']
-        streamID = self.createNewStreamDestination(stream_obj) # id might get updated
-        return streamID
+        self.known_streams[stream] = stream_obj
+        self.known_stream_versions[stream] = stream_obj['definition']
+        stream_id = self.create_new_stream_destination(stream_obj) # id might get updated
+        return stream_id
 
-    # creates a new stream or creates a new version of a stream based on template. 
-    # also enters formatStr into the knownStreams dict
-    # return streamID
-    def createNewStreamDestintion(self,stream_obj):
+    def create_new_stream_destination(self, stream_obj):
+        '''Store a new stream or creates a new version of a stream in the destination.
+        return streamID
+        '''
         raise NotImplementedError
 
-    def formatString(self,template,keyOrder):
-        formatStr = '!' # use network byte order
+    def format_string(self, template, key_order):
+        '''Generates a format string for unpacking native data packets.
+        Returns a tuple of (error, format_str) where error=0 for success.
+        '''
+        format_str = '!' # use network byte order
         try:
-            formatStr += data_types[self.config.get("Server","timestamp_type")]["format_char"]
+            format_str += data_types[self.config.get("Server", "timestamp_type")]["format_char"]
         except KeyError:
-            formatStr += data_types["uint"]["format_char"]
+            format_str += data_types["uint"]["format_char"]
 
-        for key in keyOrder:
-          dtype = template[key]
-          try:
-            formatStr += data_types[dtype]["format_char"]
-            if not data_types[dtype]["binary_allowed"]:
-              return (1,"Unsupported type '{}' in binary data.".format(dtype))
-          except KeyError:
-            return (1,"Type \"{}\" not recognized.".format(dtype))
-        return (0, formatStr)
+        for key in key_order:
+            dtype = template[key]
+            try:
+                format_str += data_types[dtype]["format_char"]
+                if not data_types[dtype]["binary_allowed"]:
+                    return (1, "Unsupported type '{}' in binary data.".format(dtype))
+            except KeyError:
+                return (1, "Type \"{}\" not recognized.".format(dtype))
+        return (0, format_str)
 
     # returns version and streamID
-    def registerStream(self,stream,template,keyOrder=None):
+    def register_stream(self, stream, template, key_order=None):
+        '''Register a new stream or new version of a new stream with the server.
+        Returns a tuple of (error, stream_ver) where error=0 for success, and 
+        stream_ver is a byte string that serves as a unique identifier.
+        '''
         update = False
-        destVersion = None
+        dest_version = None
         stream = stream.strip()
         self.logger.info("Attempt to register stream %s"%(stream))
-        if stream not in self.knownStreams.keys():
+        if stream not in self.known_streams.keys():
             update = True
-            destVersion = 1
+            dest_version = 1
         else:
-            streamID = self.knownStreams[stream]["id"]
-            destVersion = self.knownStreams[stream]["version"]
-            if template_validation(template,self.knownStreamVersions[stream]):
-                self.logger.info("Known stream, %s matching current defintion, so no database modification needed"%(stream))
+            stream_id = self.known_streams[stream]["id"]
+            dest_version = self.known_streams[stream]["version"]
+            if template_validation(template, self.known_stream_versions[stream]):
+                msg = "Known stream, {} matching current defintion."
+                msg += " No database modification needed."
+                self.logger.info(msg.format(stream))
                 update = False
             else:
                 update = True
-                destVersion += 1
+                dest_version += 1
         if update:
-            streamID = self.createNewStream(stream,destVersion,template,keyOrder)
+            stream_id = self.create_new_stream(stream, dest_version, template, key_order)
             # update the current streams after all that
-            self.readStreamDefTable()
-        return (0, struct.pack("!II",destVersion,streamID))
+            self.read_stream_def_table()
+        return (0, struct.pack("!II", stream_id, dest_version))
 
-    def insertMeasurement(self,stream,measurements):
+    def insert_measurement(self, stream, measurements):
+        '''Save formated measurement to the destination.'''
         raise NotImplementedError
 
-    def measurement(self,stream,measurements):
-        if stream not in self.knownStreams.keys():
-            self.logger.warning("trying to add a measurement to data on an unknown stream: {}".format(stream))
-            return (1,"Unknown stream")
+    def measurement(self, stream, measurements):
+        '''Perfoms measurement validation, timestamps data if missing,
+        The saves to destination.
 
-        if not measurement_validation(measurements,self.knownStreamVersions[stream]):
+        Returns a tuple of (error, result_text, measurements) where error=0 for success
+        error: 0 for successful operation
+        result_text: message to return to client
+        measurements: processed data, empty dict if error
+        '''
+        if stream not in self.known_streams.keys():
+            msg = "trying to add a measurement to data on an unknown stream: {}"
+            self.logger.warning(msg.format(stream))
+            return (1, "Unknown stream", {})
+
+        if not measurement_validation(measurements, self.known_stream_versions[stream]):
             self.logger.warning("Measurement didn't validate against the pre-determined format")
-            return (1,"Invalid measurements against schema")
+            return (1, "Invalid measurements against schema", {})
 
         try:
-            if measurements[timestamp] == 0:
+            if measurements[TIMESTAMP] == 0:
                 raise KeyError
         except KeyError:
-            measurements[timestamp] = current_time(self.config)
+            measurements[TIMESTAMP] = current_time(self.config)
 
-        self.insertMeasurement(stream,measurements)
+        self.insert_measurement(stream, measurements)
         result = 0
-        resultText = ""
-        return (result,resultText,measurements)
+        result_text = ""
+        return (result, result_text, measurements)
 
-    def measurementOrdered(self,stream,ts,measurements):
+    def measurement_ordered(self, stream, time_stamp, measurements):
+        '''Process a list of implicitly ordered measurements, then save to destination.
+
+        Returns a tuple of (error, result_text, measurements) where error=0 for success
+        error: 0 for successful operation
+        result_text: message to return to client
+        measurements: processed data, empty dict if error
+        '''
         meas = {}
-        for key in self.knownStreamVersions[stream]:
-          idx = self.knownStreamVersions[stream][key]["keyIndex"]
-          meas[key] = measurements[idx]
-	meas[timestamp] = ts
-        return self.measurement(stream,meas)
+        for key in self.known_stream_versions[stream]:
+            idx = self.known_stream_versions[stream][key]["key_index"]
+            meas[key] = measurements[idx]
+        meas[TIMESTAMP] = time_stamp
+        return self.measurement(stream, meas)
 
-    def measurementBinary(self,stream,measurements):
-        dtuple = struct.unpack_from(self.knownStreams[stream]["formatStr"], measurements)
+    def measurement_binary(self, stream, measurements):
+        '''Process a binary list of implicitly ordered measurements, then save to destination.
+
+        Returns a tuple of (error, result_text, measurements) where error=0 for success
+        error: 0 for successful operation
+        result_text: message to return to client
+        measurements: processed data, empty dict if error
+        '''
+        dtuple = struct.unpack_from(self.known_streams[stream]["format_str"], measurements)
         meas = list(dtuple[1:])
-	ts = dtuple[0]
-        return self.measurementOrdered(stream,ts,meas)
+        time_stamp = dtuple[0]
+        return self.measurement_ordered(stream, time_stamp, meas)
 
-    def findStream(self, streamID):
-        for stream in self.knownStreams:
-            if self.knownStreams[stream]["id"] == streamID:
+    def find_stream(self, stream_id):
+        '''Look up stream based on the stream id number'''
+        for stream in self.known_streams:
+            if self.known_streams[stream]["id"] == stream_id:
                 return stream
         raise ValueError
 
-    # read stream data from storage between the timestamps given by time = [start,stop]
-    def getRawStreamData(self,stream,start=None,stop=None):
+    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+        '''read stream data from storage between the timestamps
+        given by time = [start,stop]
+        '''
         raise NotImplementedError
         
-    # read stream.field data from storage between the timestamps given by time = [start,stop]
-    def getRawStreamFieldData(self,stream,field,start=None,stop=None):
+    # 
+    def get_raw_stream_field_data(self, stream, field, start=None, stop=None):
+        '''read stream.field data from storage between the timestamps 
+        given by time = [start,stop]
+        '''
         # send dummy dict with single field
-        return self.getRawStreamData(stream=stream,start=start,stop=stop, definition={field:''}) 
+        return self.get_raw_stream_data(stream, start=start, stop=stop, definition={field:''}) 
 
-    # get statistics on the stream data during the time window time = [start, stop]
-    def getStatStreamData(self,stream,start=None,stop=None):
+    def get_stat_stream_data(self, stream, start=None, stop=None):
+        '''Get statistics on the stream data during the time window time = [start, stop]
+        '''
         try:
-            streamData = self.getRawStreamData(stream,start,stop)
+            stream_data = self.get_raw_stream_data(stream, start, stop)
             data = {}
-            for field in streamData:
-                if field == timestamp:
-                    data[field] = {'start': streamData[field][0], 'stop': streamData[field][1]}
-                elif self.knownStreamVersions[stream][field]['type'] == 'string':
-                    data[field] = streamData[field] # TODO: figure out how to handle this
+            for field in stream_data:
+                if field == TIMESTAMP:
+                    data[field] = {'start': stream_data[field][0], 'stop': stream_data[field][1]}
+                elif self.known_stream_versions[stream][field]['type'] == 'string':
+                    data[field] = stream_data[field] # TODO: figure out how to handle this
                 else:
-                    # some stats need to be converted back to the native python type for JSON serialization 
-                    # (this was ok befor eI am not sure why it breaks now, maybe its a windows thing)
-                    dtype = data_types[self.knownStreamVersions[stream][field]['type']]["type"]
-                    avg = np.nanmean(streamData[field])
-                    std = np.nanstd(streamData[field])
-                    max = dtype(np.nanmax(streamData[field]))
-                    min = dtype(np.nanmin(streamData[field]))
-                    data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
-            result, resultText = (0,data)
+                    # some stats need to be converted back to the native python 
+                    # type for JSON serialization
+                    dtype = data_types[self.known_stream_versions[stream][field]['type']]["type"]
+                    avg = np.nanmean(stream_data[field])
+                    std = np.nanstd(stream_data[field])
+                    max = dtype(np.nanmax(stream_data[field]))
+                    min = dtype(np.nanmin(stream_data[field]))
+                    data[field] = {
+                        'average': avg,
+                        'standard_deviation': std, 
+                        'max': max, 
+                        'min': min
+                    }
+            result, result_text = (0, data)
         except (ValueError, IndexError):
             msg = "No data in requested time window."
-            result, resultText = (1, dict(error=msg))
+            result, result_text = (1, dict(error=msg))
         except KeyError:
             msg = "Requested stream `{}` does not exist.".format(stream)
             self.logger.info(msg)
-            result, resultText = (1, dict(streams=self.knownStreams, error=msg))
-        except:
+            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+        except Exception:
             self.logger.exception("Exception in server code:")
             msg = "Could not process request."
-            result, resultText = (1, dict(streams=self.knownStreams, error=msg))
-        finally:
-            return (result,resultText)
+            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+        
+        return(result, result_text)
 
-    # get statistics on the stream.field data during the time window time = [start, stop]
-    def getStatStreamFieldData(self,stream,field,start=None,stop=None):
-      try:
-        fieldData = self.getRawStreamFieldData(stream,field,start,stop)
-        data = {}
-        if self.knownStreamVersions[stream][field]['type'] == 'string':
-            data[field] = fieldData[field] # TODO: figure out how to handle this
-        else:
-            # some stats need to be converted back to the native python type for JSON serialization 
-            # (this was ok before I am not sure why it breaks now, maybe its a windows thing)
-            dtype = data_types[self.knownStreamVersions[stream][field]['type']]["type"]
-            avg = np.nanmean(fieldData[field])
-            std = np.nanstd(fieldData[field])
-            max = dtype(np.nanmax(fieldData[field]))
-            min = dtype(np.nanmin(fieldData[field]))
-            data[field] = { 'average': avg, 'standard_deviation': std, 'max': max, 'min': min }
-        result, resultText = (0,data)
-      except (ValueError, IndexError):
-        msg = "No data in requested time window."
-        result, resultText = (1, dict(error=msg))
-      except KeyError:
-        msg = "Requested stream `{}` does not exist.".format(stream)
-        self.logger.info(msg)
-        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
-      except NotImplementedError:
-        msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
-        self.logger.info(msg)
-        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
-      except:
-        self.logger.exception("Exception in server code:")
-        msg = "Could not process request."
-        result, resultText = (1, dict(streams=self.knownStreams, error=msg))
-      finally:
-        return (result,resultText)
+    def get_stat_stream_field_data(self, stream, field, start=None, stop=None):
+        '''get statistics on the stream.field data during the time window 
+        time = [start, stop]
+        '''
+        try:
+            field_data = self.get_raw_stream_field_data(stream, field, start, stop)
+            data = {}
+            if self.known_stream_versions[stream][field]['type'] == 'string':
+                data[field] = fieldData[field] # TODO: figure out how to handle this
+            else:
+                # some stats need to be converted back to the native python type for JSON
+                #  serialization
+                dtype = data_types[self.known_stream_versions[stream][field]['type']]["type"]
+                avg = np.nanmean(field_data[field])
+                std = np.nanstd(field_data[field])
+                max = dtype(np.nanmax(field_data[field]))
+                min = dtype(np.nanmin(field_data[field]))
+                data[field] = {
+                    'average': avg,
+                    'standard_deviation': std,
+                    'max': max,
+                    'min': min
+                }
+            result, result_text = (0, data)
+        except (ValueError, IndexError):
+            msg = "No data in requested time window."
+            result, result_text = (1, dict(error=msg))
+        except KeyError:
+            msg = "Requested stream `{}` does not exist.".format(stream)
+            self.logger.info(msg)
+            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+        except NotImplementedError:
+            msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
+            self.logger.info(msg)
+            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+        except Exception:
+            self.logger.exception("Exception in server code:")
+            msg = "Could not process request."
+            result, result_text = (1, dict(streams=self.known_streams, error=msg))
 
-    def validateTimeRange(self,start,stop):
+        return (result, result_text)
+
+    def validate_time_range(self, start, stop):
+        '''Make sure time range is valid, if not rearrange start and stop times
+        Returns tuple of validated (start, stop) times in 32b format
+        '''
         try:
             stop = long(stop)*2**32
         except TypeError:
@@ -279,30 +356,34 @@ class destination:
             start = stop - 5*60L*2**32 # 5 minute range default
         if start > stop:
             self.logger.warning("Requested read range out of order. Swapping range.")
-            self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
+            self.logger.debug("Read request time range (start, stop): ({},{})".format(start, stop))
             return (stop, start)
-        else:
-            self.logger.debug("Read request time range (start, stop): ({},{})".format(start,stop))
-            return (start, stop)
+
+        self.logger.debug("Read request time range (start, stop): ({},{})".format(start, stop))
+        return (start, stop)
 
     def print_stream_info(self):
-        for stream in self.knownStreamVersions:
+        '''Print user readable display of current streams in destination'''
+        for stream in self.known_stream_versions:
             self.logger.info("")
             self.logger.info("="*20 + " {} ".format(stream) + "="*20)
-            self.logger.info("  StreamID: {}".format(self.knownStreams[stream]['id']))
-            for field_name in self.knownStreamVersions[stream]:
-                self.logger.info("  Field: {} ({})".format(
+            self.logger.info("  stream_id: {}".format(self.known_streams[stream]['id']))
+            for field_name in self.known_stream_versions[stream]:
+                self.logger.info("  field: {} ({})".format(
                     field_name, 
-                    self.knownStreamVersions[stream][field_name]['type'])
-                )
+                    self.known_stream_versions[stream][field_name]['type']
+                    ))
         self.logger.info("")
 
-    def get_streamID(self,stream):
-        if stream in self.knownStreams:
-            return self.knownStreams[stream]['id']
-        streamID = 0
-        for s in self.knownStreams:
-            sid = self.knownStreams[s]['id']
-            if sid > streamID:
-                streamID = sid
-        return streamID + 1
+    def get_stream_id(self, stream):
+        '''Generate a new stream id by dynamically checking the id of all 
+        known streams and incrementing
+        ''' 
+        if stream in self.known_streams:
+            return self.known_streams[stream]['id']
+        stream_id = 0
+        for s in self.known_streams:
+            sid = self.known_streams[s]['id']
+            if sid > stream_id:
+                stream_id = sid
+        return stream_id + 1

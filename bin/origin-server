@@ -63,20 +63,20 @@ class MonServer(object):
 
     dest = config.get("Server","destiniation").lower()
     if  dest == "mysql":
-        from origin.server import mysql_destination
-        self.dest = mysql_destination(logger,config)
+        from origin.server import MySQLDestination
+        self.dest = MySQLDestination(logger,config)
 
     elif dest == "hdf5":
-        from origin.server import hdf5_destination
-        self.dest = hdf5_destination(logger,config)
+        from origin.server import HDF5Destination
+        self.dest = HDF5Destination(logger,config)
 
     elif dest == "filesystem":
-        from origin.server import filesystem_destination
-        self.dest = filesystem_destination(logger,config)
+        from origin.server import FilesystemDestination
+        self.dest = FilesystemDestination(logger,config)
 
     elif dest == "mongodb":
-        from origin.server import mongodb_destination
-        self.dest = mongodb_destination(logger,config)
+        from origin.server import MongoDBDestination
+        self.dest = MongoDBDestination(logger,config)
 
     elif dest == '':
         logger.critical("No destination specified in configs. Killing server...")
@@ -116,13 +116,13 @@ class MonServer(object):
       if format=='native':
         binaryData = True
         streamID = struct.unpack("!I",msg[:4])[0]
-        stream = self.dest.findStream(streamID)
+        stream = self.dest.find_stream(streamID)
         self.logger.debug('data msg recieved, for stream '+stream)
         data = msg[4:] # remove first 4 bytes
       elif format=='JSON':
         messageDecoded = json.loads(msg)
         stream = messageDecoded[0]
-        streamID = self.dest.knownStreams[stream]["id"]
+        streamID = self.dest.known_streams[stream]["id"]
       else:
         result = 1
         resultText = "Unrecognized data format `{}` specified".format(format)
@@ -136,7 +136,7 @@ class MonServer(object):
 
     if not fail:
       if binaryData:
-        result, resultText, meas = self.dest.measurementBinary(stream,data)
+        result, resultText, meas = self.dest.measurement_binary(stream,data)
 
       else:
         if len(messageDecoded) != 3:
@@ -209,7 +209,7 @@ class MonServer(object):
     if not fail:
       stream = messageDecoded[0]
       self.logger.info("Received registration of stream %s"%(stream))
-      result,resultText = self.dest.registerStream(stream,recordDict,keyOrder)
+      result,resultText = self.dest.register_stream(stream,recordDict,keyOrder)
 
     if result!=0:
       self.logger.warn("Unable to register stream. Got msg that is badly formatted: %s"%(msg))
@@ -249,7 +249,7 @@ class MonServer(object):
     # if msg is an empty JSON object then send back the list of known streams
     # this is used for subscriptions
     if msg == '{}':
-        result, resultText = (0, dict(streams=self.dest.knownStreams))
+        result, resultText = (0, dict(streams=self.dest.known_streams))
         returnMessage = (result,resultText)
         read_stream.send(json.dumps(returnMessage))
         return
@@ -259,10 +259,10 @@ class MonServer(object):
       stream = request_obj['stream'].strip()
     except ValueError:
       result = 1
-      resultText = dict(streams=self.dest.knownStreams, error="Failed to decode request.")
+      resultText = dict(streams=self.dest.known_streams, error="Failed to decode request.")
     except KeyError:
       result = 1
-      resultText = dict(streams=self.dest.knownStreams, error="Request did not have stream property.")
+      resultText = dict(streams=self.dest.known_streams, error="Request did not have stream property.")
     else:
       if 'start' in request_obj:
         start = request_obj['start']
@@ -279,26 +279,26 @@ class MonServer(object):
           self.logger.debug("Read request for stream `{}.{}` recieved.".format(stream,field))
           if ('raw' in request_obj) and request_obj['raw']:
             self.logger.debug("Raw data requested.")
-            result, resultText = (0,self.dest.getRawStreamFieldData(stream,field,start,stop))
+            result, resultText = (0,self.dest.get_raw_stream_field_data(stream,field,start,stop))
           else:
-            result, resultText = self.dest.getStatStreamFieldData(stream,field,start,stop)
+            result, resultText = self.dest.get_stat_stream_field_data(stream,field,start,stop)
         else:
           self.logger.debug("Read request for stream `{}` recieved.".format(stream))
           if ('raw' in request_obj) and request_obj['raw']:
             self.logger.debug("Raw data requested.")
-            result, resultText = (0,self.dest.getRawStreamData(stream,start,stop))
+            result, resultText = (0,self.dest.get_raw_stream_data(stream,start,stop))
           else:
-            result, resultText = self.dest.getStatStreamData(stream,start,stop)
+            result, resultText = self.dest.get_stat_stream_data(stream,start,stop)
 
       except KeyError: # probably undefined stream
         msg = "Requested stream `{}` does not exist.".format(stream)
         self.logger.info(msg)
-        result, resultText = (1, dict(streams=self.dest.knownStreams, error=msg))
+        result, resultText = (1, dict(streams=self.dest.known_streams, error=msg))
 
       except NotImplementedError: # I am using this to catch an undefined field error
         msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
         self.logger.info(msg)
-        result, resultText = (1, dict(streams=self.dest.knownStreams, error=msg))
+        result, resultText = (1, dict(streams=self.dest.known_streams, error=msg))
 
       except IndexError: # no data in time window
         msg = "No data in requested time window."
@@ -307,7 +307,7 @@ class MonServer(object):
       except Exception:
         self.logger.exception("Unexpected exception in read message code:")
         # return a list of valid options for the read
-        resp = dict(streams=self.dest.knownStreams, error="Server encountered an error.")
+        resp = dict(streams=self.dest.known_streams, error="Server encountered an error.")
         result, resultText = (1, resp)
 
     finally:
