@@ -35,6 +35,11 @@ class HDF5Destination(Destination):
             except IOError:
                 self.logger.error("Unable to create data file: {}".format(h5f))
 
+    def close(self):
+        '''Disconnects and prepares to stop'''
+        self.hdf5_file.flush()
+        self.hdf5_file.close()
+
     def read_stream_def_table(self):
         known_streams = {}
         known_stream_versions = {}

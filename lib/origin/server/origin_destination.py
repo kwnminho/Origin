@@ -11,7 +11,7 @@ import numpy as np
 
 from origin.server import template_validation
 from origin.server import measurement_validation
-from origin import data_types, current_time, TIMESTAMP
+from origin import data_types, current_time, TIMESTAMP, registration_validation
 
 ################################################################################
 #
@@ -70,6 +70,10 @@ class Destination(object):
         '''connect/open (w/e) database/file'''
         raise NotImplementedError
 
+    def close(self):
+        '''Disconnects and prepares to stop'''
+        raise NotImplementedError
+
     def read_stream_def_table(self):
         '''reads stored metadata and fills into the knownStreams, and 
         knownStreamVersions dictionaries
@@ -90,9 +94,15 @@ class Destination(object):
         stream_id = self.get_stream_id(stream)
 
         definition = {}
-        for i, key in enumerate(key_order):
-            k = key.strip()
-            definition[k] = {"type": template[k], "key_index": i}
+
+        if key_order is not None:
+            for i, key in enumerate(key_order):
+                k = key.strip()
+                definition[k] = {"type": template[k], "key_index": i}
+        else:
+            for key in template:
+                k = key.strip()
+                definition[k] = {"type": template[k], "key_index": -1}
 
         if version > 1:
             stream_obj = self.known_streams[stream]
@@ -130,6 +140,9 @@ class Destination(object):
         '''Generates a format string for unpacking native data packets.
         Returns a tuple of (error, format_str) where error=0 for success.
         '''
+        if key_order is None:
+            return (1, "No key_order specified")
+
         format_str = '!' # use network byte order
         try:
             format_str += data_types[self.config.get("Server", "timestamp_type")]["format_char"]
@@ -167,10 +180,15 @@ class Destination(object):
                 msg += " No database modification needed."
                 self.logger.info(msg.format(stream))
                 update = False
+            # its a new version
             else:
                 update = True
                 dest_version += 1
+
         if update:
+            valid, msg = registration_validation(stream, template, key_order)
+            if not valid:
+                return (1, msg)
             stream_id = self.create_new_stream(stream, dest_version, template, key_order)
             # update the current streams after all that
             self.read_stream_def_table()

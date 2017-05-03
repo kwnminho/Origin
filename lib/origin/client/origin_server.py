@@ -3,7 +3,8 @@ from origin.client import server_connection
 from origin.client import float_field
 from origin.client import integer_field
 from origin.client import string_field
-from origin import data_types
+from origin import data_types, registration_validation
+
 
 import zmq
 import sys
@@ -49,31 +50,6 @@ def formatStreamDeclaration(stream,records,keyOrder,format):
     else:
         return declarationFormater(stream,sentDict,keyOrder)
 
-def simpleString(input):
-    invalidChars = set(string.punctuation.replace("_",""))
-    if any(char in invalidChars for char in input):
-        return 1
-    else:
-        return 0
-
-def validateStreamDeclaration(stream,template):
-    fields = template.keys()
-    error = False
-    for f in fields:
-        try:
-            data_types[template[f]]
-        except KeyError:
-            print("type {} not recognized".format(template[f]))
-            error = True
-        if simpleString(f) != 0:
-            print("Invalid field name: {}".format(f))
-            error = True
-    if simpleString(stream) != 0:
-        print("Invalid stream name: {}".format(stream))
-        error = True
-    if not error:
-        return 0
-    return 1
 
 class server:
     def __init__(self, config):
@@ -83,7 +59,7 @@ class server:
         return True
 
     def registerStream(self,stream,records,keyOrder=None,format=None,timeout=1000):
-        valid = validateStreamDeclaration(stream,records)
+        valid = registration_validation(stream,records)
 
         if valid != 0:
             print "invalid stream declaration"

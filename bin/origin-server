@@ -61,7 +61,7 @@ class MonServer(object):
     self.state = "UNKNOWN"
     self._strlist = {}
 
-    dest = config.get("Server","destiniation").lower()
+    dest = config.get("Server", "destination").lower()
     if  dest == "mysql":
         from origin.server import MySQLDestination
         self.dest = MySQLDestination(logger,config)
