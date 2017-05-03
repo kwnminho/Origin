@@ -97,8 +97,9 @@ register_port       = 5558
 measure_port        = 5559
 alert_port          = 5560
 read_port           = 5561
-json_register_port  = 5562
-json_measure_port   = 5563
+pub_port            = 5562
+json_register_port  = 5563
+json_measure_port   = 5564
 
 timestamp_type      = uint64
 
