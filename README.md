@@ -93,12 +93,12 @@ To begin with we are just going to test the server locally so use the `config/or
 ```python
 [Server]
 ip                  = 127.0.0.1 ; change to origin server address for deployment
-register_port       = 5556
-measure_port        = 5557
-alert_port          = 5558
-read_port           = 5559
-json_register_port  = 5566
-json_measure_port   = 5567
+register_port       = 5558
+measure_port        = 5559
+alert_port          = 5560
+read_port           = 5561
+json_register_port  = 5562
+json_measure_port   = 5563
 
 timestamp_type      = uint64
 
