@@ -59,9 +59,9 @@ class server:
         return True
 
     def registerStream(self,stream,records,keyOrder=None,format=None,timeout=1000):
-        valid = registration_validation(stream,records)
+        valid = registration_validation(stream, records, keyOrder)
 
-        if valid != 0:
+        if not valid:
             print "invalid stream declaration"
             return None
 
