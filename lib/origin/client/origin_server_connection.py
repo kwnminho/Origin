@@ -1,9 +1,11 @@
 import json
 import sys
 import zmq
-from origin import data_types, TIMESTAMP
 import struct
 import ctypes
+import traceback
+
+from origin import data_types, TIMESTAMP
 
 # returns string and size tuple
 def makeFormatString(config, keyOrder, records):
@@ -49,26 +51,47 @@ class server_connection:
         except KeyError:
             #print "No timestamp specified, server will timestamp on arrival"
             msgData.append(0)
+
         if self.format is None:
             for k in self.keyOrder:
                 msgData.append(kwargs[k])
             try:
                 self.socket.send(self.formatRecord(msgData), zmq.NOBLOCK)
-    	    except:
-		print("Connection to Server Failed")
-		exit(1) 
+            except zmq.Again:
+                print("Connection to Server Failed")
+                #self.socket.close()
+                exit(1)
+            except:
+                print "Uncaught exception:"
+                print '-'*60
+                traceback.print_exc(file=sys.stdout)
+                print '-'*60
+                print("Exiting")
+                #self.socket.close()
+                exit(1)
+
         elif self.format == "json":
-	    msgData[0] = self.stream
+            msgData[0] = self.stream
             msgMap = {}
             for k in kwargs.keys():
                 if k != TIMESTAMP:
                     msgMap[k] = kwargs[k]
             msgData.append(msgMap)
             try: 
-            	self.socket.send(json.dumps(msgData),zmq.NOBLOCK)
-    	    except:
-		print("Connection to Server Failed")
+                self.socket.send(json.dumps(msgData), zmq.NOBLOCK)
+            except zmq.Again:
+                print("Connection to Server Failed")
+                #self.socket.close()
                 exit(1)
+            except:
+                print "Uncaught exception:"
+                print '-'*60
+                traceback.print_exc(file=sys.stdout)
+                print '-'*60
+                print("Exiting")
+                #self.socket.close()
+                exit(1)
+
     def close(self):
         print "closing socket"
         self.socket.close()

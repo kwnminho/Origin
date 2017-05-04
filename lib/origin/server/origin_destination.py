@@ -268,7 +268,6 @@ class Destination(object):
         '''
         raise NotImplementedError
         
-    # 
     def get_raw_stream_field_data(self, stream, field, start=None, stop=None):
         '''read stream.field data from storage between the timestamps 
         given by time = [start,stop]

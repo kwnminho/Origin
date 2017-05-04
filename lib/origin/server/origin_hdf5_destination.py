@@ -184,17 +184,25 @@ class HDF5Destination(Destination):
 
         # check if the buffer has the requested range first, it usually will be
         buff_start = array[pointer]
-        # if pointer == 0:
-        #     buff_stop =  array[-1]
-        # else:
-        #     buff_stop =  array[pointer-1]
+        # if this is our first pass then the buffer starts at position 0
+        # we can tell because if the timestamp is 0, it has not been overwritten yet
+        if buff_start == 0:
+            buff_start = array[0]
 
         if buff_start > start: # if not go look for it
             # data after pointer has already been saved to the archive
             raw_data[TIMESTAMP] = array[:pointer]
             for field in definition:
                 raw_data[field] = raw_data[field]['array'][:pointer]
-            raw_data = self.getArchivedStreamData(stream_group, start, stop, raw_data, definition)
+
+            raw_data = self.get_archived_stream_data(
+                stream_group, 
+                start, 
+                stop, 
+                raw_data, 
+                definition
+            )
+
         else:   # otherwise all requested data is contained in the buffer
             raw_data[TIMESTAMP] = np.concatenate((array[pointer:], array[:pointer]))
             for field in definition:
@@ -214,23 +222,23 @@ class HDF5Destination(Destination):
 
         # now filter the data down to the requested range
         idx_start = None
-        idx_stop = None
+        idx_stop = None # when slicing None goes to end of list not -1
         for i, time_stamp in enumerate(raw_data[TIMESTAMP]):
             if (idx_start is None) and (time_stamp >= start):
                 idx_start = i
             elif time_stamp > stop:
                 idx_stop = i-1
                 break
-        if idx_stop is None:
-            idx_stop = -1
-        if (idx_start is None) or (idx_stop is None):
+
+        if (idx_start is None):
             msg = "error in indexing (index start, index stop): ({},{})"
             self.logger.warning(msg.format(idx_start, idx_stop))
             raise IndexError
-        self.logger.debug((idx_start, idx_stop))
+
         data = {}
         # json method cant handle numpy array
         data[TIMESTAMP] = raw_data[TIMESTAMP][idx_start:idx_stop].tolist()
+
         for field in definition:
             # json method cant handle numpy array
             data[field] = raw_data[field][idx_start:idx_stop].tolist()
@@ -240,6 +248,10 @@ class HDF5Destination(Destination):
         '''get raw_data in range from the archived data'''
         time_dset = stream_group[TIMESTAMP]
         row_pointer = stream_group.attrs['row_count']
+        # if there is no old data then just stop now
+        if row_pointer == 0:
+            return buffer_data
+
         old_data = {}
         # make as big as it needs to be then resize
         old_data[TIMESTAMP] = np.zeros(row_pointer)
@@ -247,6 +259,8 @@ class HDF5Destination(Destination):
             old_data[field] = np.zeros(row_pointer) 
         chunksize = self.config.getint('HDF5', 'chunksize')
         row_pointer -= chunksize
+        # pull data out by chunksize until the end of the data set, 
+        # or the start time has been reached
         while row_pointer >= 0:
             chunk = time_dset[row_pointer:row_pointer+chunksize]
             pnt = row_pointer

@@ -142,7 +142,7 @@ class MonServer(object):
         if len(messageDecoded) != 3:
           result = 1
           resultText = "Measurement message didn't have all the required fields"
-        elif type(messageDecoded[1]) != int:
+        elif (type(messageDecoded[1]) != int) and (type(messageDecoded[1])!= long):
           result = 1
           resultText = "Non-integer time sent"
         else:
