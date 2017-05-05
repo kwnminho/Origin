@@ -157,17 +157,24 @@ class HDF5Destination(Destination):
         try:
             stream_group = self.hdf5_file[self.hdf5_file[stream].attrs['currentVersion']]
         except KeyError:
-            raise KeyError
+            msg = "Requested stream `{}` does not exist.".format(stream)
+            return (1, {}, msg)
 
         if definition is None:
             definition = self.known_stream_versions[stream]
-
+            
         # read ring buffers and pointers in case the pointer advances during read
         raw_data = {}
-        raw_data[TIMESTAMP] = { 
-            'pointer': stream_group.attrs['row_count_buffer'], # pointer in ring buffer
-            'array':  stream_group[TIMESTAMP + '_buffer']
-        }
+        try:
+            raw_data[TIMESTAMP] = { 
+                'pointer': stream_group.attrs['row_count_buffer'], # pointer in ring buffer
+                'array':  stream_group[TIMESTAMP + '_buffer']
+            }
+        except KeyError:
+            # no data has been saved yet, so all queries are out of range
+            msg = "Stream declared, but no data saved."
+            return (1, {}, msg)
+
         try:
             for field in definition:
                 raw_data[field] = { 
@@ -175,8 +182,8 @@ class HDF5Destination(Destination):
                     'array':  stream_group[field + '_buffer']
                 }
         except KeyError:
-            # use this error to differentiate between a stream error and a field error
-            raise NotImplementedError # I am a shitty person and I know it
+            msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
+            return (1, {}, msg)
 
         # correct the ring buffer order to linear
         pointer = raw_data[TIMESTAMP]['pointer']+1
@@ -230,10 +237,11 @@ class HDF5Destination(Destination):
                 idx_stop = i-1
                 break
 
-        if (idx_start is None):
+        if idx_start is None:
             msg = "error in indexing (index start, index stop): ({},{})"
             self.logger.warning(msg.format(idx_start, idx_stop))
-            raise IndexError
+            msg = "No data in requested time window."
+            return (1, {}, msg)
 
         data = {}
         # json method cant handle numpy array
@@ -242,7 +250,7 @@ class HDF5Destination(Destination):
         for field in definition:
             # json method cant handle numpy array
             data[field] = raw_data[field][idx_start:idx_stop].tolist()
-        return data
+        return (0, data, '')
         
     def get_archived_stream_data(self, stream_group, start, stop, buffer_data, definition):
         '''get raw_data in range from the archived data'''

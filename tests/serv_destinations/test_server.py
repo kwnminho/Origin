@@ -151,7 +151,9 @@ class TestDest(object):
     ])
 
     def test_data_stream(self, data_type):
-        '''should register stream, successfully send a data packet, and read it out'''
+        '''should register stream, successfully send a data packet, and read it out
+        Lowest level measurement inserter: insert_measurement
+        '''
         field = 'key1'
         stream, template, key_order = ("test", {field: data_type}, [field])
         # register stream
@@ -167,7 +169,98 @@ class TestDest(object):
 
         start = int(time.time()) - 1 # 32b time
         stop = int(time.time()) + 1 # 32b time
-        ret_data = self.dest.get_raw_stream_data(stream, start, stop)
-        logger.error(ret_data)
+        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
+        assert result == 0
+        assert msg == ''
         assert time64 == long(ret_data[TIMESTAMP][0])
         assert data[field] == ret_data[field][0]
+        # read out again with other function
+        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
+        assert result == 0
+        assert msg == ''
+        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[field] == ret_data[field][0]
+
+    @pytest.mark.parametrize("data_type", [
+        "int", "int8", "int16", "int32", "int64",
+        "uint", "uint8", "uint16", "uint32", "uint64",
+        "float", "float32", "double", "float64",
+        "string"
+    ])
+
+    def test_data_stream2(self, data_type):
+        '''should register stream, successfully send a data packet, and read it out
+        Second level measurement inserter: measurement
+        '''
+        field = 'key1'
+        stream, template, key_order = ("test", {field: data_type}, [field])
+        # register stream
+        result, msg = self.dest.register_stream(stream, template, key_order=key_order)
+        assert result == 0
+
+        # insert measurement, no return value        
+        time64 = current_time(CONFIG) # 64b time
+        logger.error(time64)
+        data = {TIMESTAMP: time64, field: random_data(data_type)}
+        result, msg, measurement = self.dest.measurement(stream, data)
+        assert result == 0
+        assert msg == ''
+        assert data == measurement
+
+        # now try to read it out
+        start = int(time.time()) - 1 # 32b time
+        stop = int(time.time()) + 1 # 32b time
+        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
+        assert result == 0
+        assert msg == ''
+        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[field] == ret_data[field][0]
+        # read out again with other function
+        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
+        assert result == 0
+        assert msg == ''
+        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[field] == ret_data[field][0]
+
+    @pytest.mark.parametrize("data_type", [
+        "int", "int8", "int16", "int32", "int64",
+        "uint", "uint8", "uint16", "uint32", "uint64",
+        "float", "float32", "double", "float64",
+        "string"
+    ])
+
+    def test_data_stream_bad_meas(self, data_type):
+        '''should register stream. Should UNsuccessfully send a data packet
+        Reading out should return nothing
+        Second level measurement inserter: measurement
+        '''
+        field = 'key1'
+        stream, template, key_order = ("test", {field: data_type}, [field])
+        # register stream
+        result, msg = self.dest.register_stream(stream, template, key_order=key_order)
+        assert result == 0
+
+        # change key name, to break
+        field2 = 'key2'
+        # insert measurement, no return value        
+        time64 = current_time(CONFIG) # 64b time
+        logger.error(time64)
+        data = {TIMESTAMP: time64, field2: random_data(data_type)}
+        result, msg, measurement = self.dest.measurement(stream, data)
+        assert result == 1
+        assert msg == "Invalid measurements against schema"
+        assert {} == measurement
+
+        # now try to read it out
+        start = int(time.time()) - 1 # 32b time
+        stop = int(time.time()) + 1 # 32b time
+        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
+        assert result == 1
+        assert msg == "Stream declared, but no data saved."
+        assert ret_data == {}
+        # read out again with other function
+        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
+        assert result == 1
+        assert msg == "Stream declared, but no data saved."
+        assert ret_data == {}
+       

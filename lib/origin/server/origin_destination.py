@@ -200,7 +200,7 @@ class Destination(object):
 
     def measurement(self, stream, measurements):
         '''Perfoms measurement validation, timestamps data if missing,
-        The saves to destination.
+        Then saves to destination.
 
         Returns a tuple of (error, result_text, measurements) where error=0 for success
         error: 0 for successful operation
@@ -265,21 +265,29 @@ class Destination(object):
     def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
         '''read stream data from storage between the timestamps
         given by time = [start,stop]
+        Returns a tuple with (error, data, msg), error is 0 for success, 
+        msg holds error msg or '', data is dictionary with fields as the keys and
+        data lists as the values
         '''
         raise NotImplementedError
         
     def get_raw_stream_field_data(self, stream, field, start=None, stop=None):
         '''read stream.field data from storage between the timestamps 
         given by time = [start,stop]
+        Returns a tuple with (error, data, msg), error is 0 for success, 
+        msg holds error msg or '', data is dictionary with fields as the keys and
+        data lists as the values
         '''
-        # send dummy dict with single field
         return self.get_raw_stream_data(stream, start=start, stop=stop, definition={field:''}) 
 
     def get_stat_stream_data(self, stream, start=None, stop=None):
         '''Get statistics on the stream data during the time window time = [start, stop]
+        Returns a tuple with (error, data, msg), error is 0 for success, 
+        msg holds error msg or '', data is dictionary with fields as the keys and
+        statistical data sub-dictionaries as the values
         '''
         try:
-            stream_data = self.get_raw_stream_data(stream, start, stop)
+            result, stream_data, result_text = self.get_raw_stream_data(stream, start, stop)
             data = {}
             for field in stream_data:
                 if field == TIMESTAMP:
@@ -300,30 +308,23 @@ class Destination(object):
                         'max': max, 
                         'min': min
                     }
-            result, result_text = (0, data)
-        except (ValueError, IndexError):
-            msg = "No data in requested time window."
-            result, result_text = (1, dict(error=msg))
-        except KeyError:
-            msg = "Requested stream `{}` does not exist.".format(stream)
-            self.logger.info(msg)
-            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+
         except Exception:
             self.logger.exception("Exception in server code:")
             msg = "Could not process request."
-            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+            result, data, result_text = (1, {}, msg)
         
-        return(result, result_text)
+        return(result, data, result_text)
 
     def get_stat_stream_field_data(self, stream, field, start=None, stop=None):
         '''get statistics on the stream.field data during the time window 
         time = [start, stop]
         '''
         try:
-            field_data = self.get_raw_stream_field_data(stream, field, start, stop)
+            result, field_data, result_text = self.get_raw_stream_field_data(stream, field, start, stop)
             data = {}
             if self.known_stream_versions[stream][field]['type'] == 'string':
-                data[field] = fieldData[field] # TODO: figure out how to handle this
+                data[field] = field_data[field] # TODO: figure out how to handle this
             else:
                 # some stats need to be converted back to the native python type for JSON
                 #  serialization
@@ -338,24 +339,13 @@ class Destination(object):
                     'max': max,
                     'min': min
                 }
-            result, result_text = (0, data)
-        except (ValueError, IndexError):
-            msg = "No data in requested time window."
-            result, result_text = (1, dict(error=msg))
-        except KeyError:
-            msg = "Requested stream `{}` does not exist.".format(stream)
-            self.logger.info(msg)
-            result, result_text = (1, dict(streams=self.known_streams, error=msg))
-        except NotImplementedError:
-            msg = "Requested stream field `{}.{}` does not exist.".format(stream, field)
-            self.logger.info(msg)
-            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+
         except Exception:
             self.logger.exception("Exception in server code:")
             msg = "Could not process request."
-            result, result_text = (1, dict(streams=self.known_streams, error=msg))
+            result, data, result_text = (1, {}, msg)
 
-        return (result, result_text)
+        return(result, data, result_text)
 
     def validate_time_range(self, start, stop):
         '''Make sure time range is valid, if not rearrange start and stop times
