@@ -81,6 +81,29 @@ class TestDest(object):
             )
             remove(filename)
 
+    def register_success(self, stream, template, key_order, id=1, ver=1):
+        '''regsiter stream with server'''
+        result, idn = self.dest.register_stream(stream, template, key_order=key_order)
+        if result != 0:
+            logger.debug(idn)
+        assert result == 0
+        # the stream and version numbers start at 1
+        logger.info("version: %s", ver)
+        assert idn == struct.pack("!II", id, ver)
+
+    def insert_measurement(self, stream, template, method):
+        '''Sets up data and saves '''        
+        time64 = current_time(CONFIG) # 64b time
+        data = {TIMESTAMP: time64}
+        for key in template:
+            data[key] = random_data(template[key])
+        ret = method(stream, data)
+
+        if ret:
+            return ret, data
+        else:
+            return data
+
 
     @pytest.mark.parametrize("stream,template,key_order,expected_id,expected_ver", [
         ("test", {'key1':'int', 'key2':'float'}, ['key1', 'key2'], 1, 1),
@@ -91,10 +114,7 @@ class TestDest(object):
 
     def test_register_streams(self, stream, template, key_order, expected_id, expected_ver):
         '''should successfully register streams'''
-        result, idn = self.dest.register_stream(stream, template, key_order=key_order)
-        assert result == 0
-        # the stream and version numbers start at 1
-        assert idn == struct.pack("!II", expected_id, expected_ver)
+        self.register_success(stream, template, key_order)
 
 
     @pytest.mark.parametrize("stream,template,key_order", [
@@ -106,8 +126,6 @@ class TestDest(object):
     def test_no_register_streams(self, stream, template, key_order):
         '''should NOT register streams'''
         result, msg = self.dest.register_stream(stream, template, key_order=key_order)
-        logger.warning(result)
-        logger.warning(msg)
         assert result == 1
         # the stream and version numbers start at 1
         assert type(msg) == str
@@ -122,10 +140,7 @@ class TestDest(object):
         i = 1
         for d in data:
             stream, template, key_order = d
-            result, idn = self.dest.register_stream(stream, template, key_order=key_order)
-            assert result == 0
-            # the stream and version numbers start at 1
-            assert idn == struct.pack("!II", i, 1)
+            idn = self.register_success(stream, template, key_order, id=i)
             i += 1
 
     def test_overwrite_reg(self):
@@ -137,10 +152,7 @@ class TestDest(object):
         i = 1
         for d in data:
             stream, template, key_order = d
-            result, idn = self.dest.register_stream(stream, template, key_order=key_order)
-            assert result == 0
-            # the stream and version numbers start at 1
-            assert idn == struct.pack("!II", 1, i)
+            self.register_success(stream, template, key_order, ver=i)
             i += 1
 
     @pytest.mark.parametrize("data_type", [
@@ -157,28 +169,24 @@ class TestDest(object):
         field = 'key1'
         stream, template, key_order = ("test", {field: data_type}, [field])
         # register stream
-        result, msg = self.dest.register_stream(stream, template, key_order=key_order)
-        assert result == 0
+        self.register_success(stream, template, key_order)
 
         # insert measurement, no return value        
-        time64 = current_time(CONFIG) # 64b time
-        logger.error(time64)
-        data = {TIMESTAMP: time64, field: random_data(data_type)}
-        self.dest.insert_measurement(stream, data)
+        data = self.insert_measurement(stream, template, self.dest.insert_measurement)
+        
         # now try to read it out
-
         start = int(time.time()) - 1 # 32b time
         stop = int(time.time()) + 1 # 32b time
         result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
         assert result == 0
         assert msg == ''
-        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
         assert data[field] == ret_data[field][0]
         # read out again with other function
         result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
         assert result == 0
         assert msg == ''
-        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
         assert data[field] == ret_data[field][0]
 
     @pytest.mark.parametrize("data_type", [
@@ -195,14 +203,15 @@ class TestDest(object):
         field = 'key1'
         stream, template, key_order = ("test", {field: data_type}, [field])
         # register stream
-        result, msg = self.dest.register_stream(stream, template, key_order=key_order)
-        assert result == 0
+        self.register_success(stream, template, key_order)
 
         # insert measurement, no return value        
-        time64 = current_time(CONFIG) # 64b time
-        logger.error(time64)
-        data = {TIMESTAMP: time64, field: random_data(data_type)}
-        result, msg, measurement = self.dest.measurement(stream, data)
+        ret, data = self.insert_measurement(
+            stream, 
+            template, 
+            self.dest.measurement
+        )
+        result, msg, measurement = ret
         assert result == 0
         assert msg == ''
         assert data == measurement
@@ -213,13 +222,13 @@ class TestDest(object):
         result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
         assert result == 0
         assert msg == ''
-        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
         assert data[field] == ret_data[field][0]
         # read out again with other function
         result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
         assert result == 0
         assert msg == ''
-        assert time64 == long(ret_data[TIMESTAMP][0])
+        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
         assert data[field] == ret_data[field][0]
 
     @pytest.mark.parametrize("data_type", [
@@ -237,16 +246,17 @@ class TestDest(object):
         field = 'key1'
         stream, template, key_order = ("test", {field: data_type}, [field])
         # register stream
-        result, msg = self.dest.register_stream(stream, template, key_order=key_order)
-        assert result == 0
+        self.register_success(stream, template, key_order)
 
         # change key name, to break
-        field2 = 'key2'
-        # insert measurement, no return value        
-        time64 = current_time(CONFIG) # 64b time
-        logger.error(time64)
-        data = {TIMESTAMP: time64, field2: random_data(data_type)}
-        result, msg, measurement = self.dest.measurement(stream, data)
+        field2 = 'key12'
+        template2 = {field2: data_type}    
+        ret, data = self.insert_measurement(
+            stream, 
+            template2, 
+            self.dest.measurement
+        )
+        result, msg, measurement = ret
         assert result == 1
         assert msg == "Invalid measurements against schema"
         assert {} == measurement
@@ -263,4 +273,94 @@ class TestDest(object):
         assert result == 1
         assert msg == "Stream declared, but no data saved."
         assert ret_data == {}
+  
+    @pytest.mark.parametrize("data_type", [
+        "int", "int8", "int16", "int32", "int64",
+        "uint", "uint8", "uint16", "uint32", "uint64",
+        "float", "float32", "double", "float64",
+        "string"
+    ])
+
+    def test_data_stream_no_time(self, data_type):
+        '''should register stream. Should successfully send a data packet with no time field
+        Reading out should return nothing
+        Second level measurement inserter: measurement
+        '''
+        field = 'key1'
+        stream, template, key_order = ("test", {field: data_type}, [field])
+        # register stream
+        self.register_success(stream, template, key_order)
        
+        ret, data = self.insert_measurement(
+            stream, 
+            template, 
+            self.dest.measurement
+        )
+        result, msg, measurement = ret
+        assert result == 0
+        assert msg == ""
+        assert data[field] == measurement[field]
+        assert (data[TIMESTAMP] - measurement[TIMESTAMP]) < 2**30
+
+        # now try to read it out
+        start = int(time.time()) - 1 # 32b time
+        stop = int(time.time()) + 1 # 32b time
+        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
+        assert result == 0
+        assert msg == ''
+        # within 1/4 of a second
+        assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
+        assert data[field] == ret_data[field][0]
+        # read out again with other function
+        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
+        assert result == 0
+        assert msg == ''
+        # within 1/4 of a second
+        assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
+        assert data[field] == ret_data[field][0]
+
+    @pytest.mark.parametrize("data_type", [
+        "int", "int8", "int16", "int32", "int64",
+        "uint", "uint8", "uint16", "uint32", "uint64",
+        "float", "float32", "double", "float64",
+        "string"
+    ])
+
+    def test_data_stream_zero_time(self, data_type):
+        '''should register stream. Should successfully send a data packet with the time stamp
+        zeroed, Reading out should return nothing
+        Second level measurement inserter: measurement
+        '''
+        field = 'key1'
+        stream, template, key_order = ("test", {field: data_type}, [field])
+        # register stream
+        self.register_success(stream, template, key_order)
+    
+        ret, data = self.insert_measurement(
+            stream, 
+            template, 
+            self.dest.measurement
+        )
+        result, msg, measurement = ret
+        assert result == 0
+        assert msg == ""
+        assert data[field] == measurement[field]
+        assert (data[TIMESTAMP] - measurement[TIMESTAMP]) < 2**30
+
+        # now try to read it out
+        start = int(time.time()) - 1 # 32b time
+        stop = int(time.time()) + 1 # 32b time
+        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
+        assert result == 0
+        assert msg == ''
+        # within 1/4 of a second
+        assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
+        assert data[field] == ret_data[field][0]
+        # read out again with other function
+        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
+        assert result == 0
+        assert msg == ''
+        # within 1/4 of a second
+        assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
+        assert data[field] == ret_data[field][0]
+              
