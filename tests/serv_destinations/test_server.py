@@ -104,6 +104,26 @@ class TestDest(object):
         else:
             return data
 
+    def read_success(self, stream, data_in, field=None, timestamp=True):
+        '''Read out the data successfully and check the data for consistancy'''
+        start = int(time.time()) - 1 # 32b time
+        stop = int(time.time()) + 1 # 32b time
+
+        if field is None:
+            fields = data_in.keys()
+            result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
+        else:
+            fields = [field]
+            result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
+
+        logger.debug("fields: %s", fields)
+        assert result == 0
+        assert msg == ''
+        if timestamp:
+            assert data_in[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
+        for f in fields:
+            assert data_in[f] == ret_data[f][0]
+        return ret_data
 
     @pytest.mark.parametrize("stream,template,key_order,expected_id,expected_ver", [
         ("test", {'key1':'int', 'key2':'float'}, ['key1', 'key2'], 1, 1),
@@ -170,24 +190,10 @@ class TestDest(object):
         stream, template, key_order = ("test", {field: data_type}, [field])
         # register stream
         self.register_success(stream, template, key_order)
-
         # insert measurement, no return value        
-        data = self.insert_measurement(stream, template, self.dest.insert_measurement)
-        
-        # now try to read it out
-        start = int(time.time()) - 1 # 32b time
-        stop = int(time.time()) + 1 # 32b time
-        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
-        assert result == 0
-        assert msg == ''
-        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
-        assert data[field] == ret_data[field][0]
-        # read out again with other function
-        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
-        assert result == 0
-        assert msg == ''
-        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
-        assert data[field] == ret_data[field][0]
+        data = self.insert_measurement(stream, template, self.dest.insert_measurement)        
+        self.read_success(stream, data)
+        self.read_success(stream, data, field)
 
     @pytest.mark.parametrize("data_type", [
         "int", "int8", "int16", "int32", "int64",
@@ -215,21 +221,8 @@ class TestDest(object):
         assert result == 0
         assert msg == ''
         assert data == measurement
-
-        # now try to read it out
-        start = int(time.time()) - 1 # 32b time
-        stop = int(time.time()) + 1 # 32b time
-        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
-        assert result == 0
-        assert msg == ''
-        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
-        assert data[field] == ret_data[field][0]
-        # read out again with other function
-        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
-        assert result == 0
-        assert msg == ''
-        assert data[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
-        assert data[field] == ret_data[field][0]
+        self.read_success(stream, data)
+        self.read_success(stream, data, field)
 
     @pytest.mark.parametrize("data_type", [
         "int", "int8", "int16", "int32", "int64",
@@ -302,22 +295,12 @@ class TestDest(object):
         assert data[field] == measurement[field]
         assert (data[TIMESTAMP] - measurement[TIMESTAMP]) < 2**30
 
-        # now try to read it out
-        start = int(time.time()) - 1 # 32b time
-        stop = int(time.time()) + 1 # 32b time
-        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
-        assert result == 0
-        assert msg == ''
+        ret_data = self.read_success(stream, data)
         # within 1/4 of a second
         assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
-        assert data[field] == ret_data[field][0]
-        # read out again with other function
-        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
-        assert result == 0
-        assert msg == ''
+        ret_data = self.read_success(stream, data, field)   
         # within 1/4 of a second
         assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
-        assert data[field] == ret_data[field][0]
 
     @pytest.mark.parametrize("data_type", [
         "int", "int8", "int16", "int32", "int64",
@@ -347,20 +330,10 @@ class TestDest(object):
         assert data[field] == measurement[field]
         assert (data[TIMESTAMP] - measurement[TIMESTAMP]) < 2**30
 
-        # now try to read it out
-        start = int(time.time()) - 1 # 32b time
-        stop = int(time.time()) + 1 # 32b time
-        result, ret_data, msg = self.dest.get_raw_stream_data(stream, start, stop)
-        assert result == 0
-        assert msg == ''
+        ret_data = self.read_success(stream, data)
         # within 1/4 of a second
         assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
-        assert data[field] == ret_data[field][0]
-        # read out again with other function
-        result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
-        assert result == 0
-        assert msg == ''
+        ret_data = self.read_success(stream, data, field)   
         # within 1/4 of a second
         assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
-        assert data[field] == ret_data[field][0]
               
