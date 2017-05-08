@@ -2,41 +2,81 @@
 This module extends the Destination class to work with a MySQL database.
 """
 
+import sys
+
 import mysql.connector
+from mysql.connector import errorcode
+
 from origin.server import Destination
-from origin import data_types, timestamp
+from origin import data_types, TIMESTAMP
 
 
 class MySQLDestination(Destination):
     '''A class for storing data in a MySQL database.'''
 
     def connect(self):
+        db = self.config.get("MySQL", "db")
         self.cnx = mysql.connector.connect(
             user=self.config.get("MySQL", "user"),
             password=self.config.get("MySQL", "password"),
-            host=self.config.get("MySQL", "server_ip"),
-            database=self.config.get("MySQL", "db")
+            host=self.config.get("MySQL", "server_ip")
         )
         self.cursor = self.cnx.cursor()
+        try:
+            self.cnx.database = db
+        except mysql.connector.Error as err:
+            if err.errno == errorcode.ER_BAD_DB_ERROR:
+                self.logger.warning('No database exists, attempting to create a new database.')
+                self.create_database()
+                self.cnx.database = db
+            else:
+                self.logger.exception('Unexpected mysql exception when connecting to database.')
+        except Exception:
+            self.logger.exception('Unexpected exception when connecting to database.')
+            
+    def create_database(self, db=''):
+        '''Creates a new database default name comes from the specification in the config file'''
+        query = "CREATE DATABASE {} DEFAULT CHARACTER SET 'utf8'"
+        if db == '':
+            db = self.config.get("MySQL", "db")
+        try:
+            self.cursor.execute(query.format(db))
+        except mysql.connector.Error:
+            self.logger.exception('Unexpected mysql exception when creating database.')
+            self.logger.critical('Could not connect or create database. Stopping...')
+            sys.exit(1)
+        except Exception:
+            self.logger.exception('Unexpected exception when creating database.')
+            self.logger.critical('Could not connect or create database. Stopping...')
+            sys.exit(1)
+
+    def close(self):
+        self.cursor.close()
+        self.cnx.close()
 
     def read_stream_def_table(self):
         stream_creation = (
-            "CREATE TABLE IF NOT EXISTS origin_streams ( "
-            " id INT NOT NULL AUTO_INCREMENT,"
-            " name varchar(1024),"
-            " version integer,"
-            " PRIMARY KEY (id) "
+            "CREATE TABLE IF NOT EXISTS `origin_streams` ( "
+            " `id` INT NOT NULL AUTO_INCREMENT,"
+            " `name` VARCHAR(1024),"
+            " `version` INT,"
+            " PRIMARY KEY (`id`)"
             " ) "
         )
 
         stream_field_creation = (
-            "CREATE TABLE IF NOT EXISTS "
-            " origin_stream_fields (  "
-            " stream_name varchar(1024), "
-            " field_name varchar(1024), "
-            " version integer, "
-            " field_type varchar(100), "
-            " keyIndex integer"
+            "CREATE TABLE IF NOT EXISTS"
+            " `origin_stream_fields` ("
+            " `id` INT NOT NULL AUTO_INCREMENT,"
+            " `stream_id` INT NOT NULL,"
+            " `stream_name` VARCHAR(1024) NOT NULL,"
+            " `field_name` VARCHAR(1024) NOT NULL,"
+            " `version` INT NOT NULL,"
+            " `field_type` VARCHAR(100),"
+            " `key_index` INT,"
+            " PRIMARY KEY (`id`)"
+            # need to add permissions to use REFERENCES command?!?
+            #" FOREIGN KEY (`stream_id`) REFERENCES `origin_streams` (`id`)"
             " )"
         )
 
@@ -51,15 +91,19 @@ class MySQLDestination(Destination):
         cursor.execute(query)
         for id, name, version in cursor:
             current_stream_versions.append((id, name, version))
+            self.logger.debug(current_stream_versions)
 
         known_stream_versions = {}
         known_streams = {}
 
         for id, name, version in current_stream_versions:
-            query = """SELECT field_name,field_type,key_index 
-            FROM origin_stream_fields 
-            WHERE stream_name=\"%s\" and version=%d"%(name,version)
-            """
+            query = (
+                "SELECT field_name,field_type,key_index" 
+                " FROM origin_stream_fields"
+                " WHERE stream_id = {} and version = {}"
+            ).format(id, version)
+
+            self.logger.debug(query)
             cursor.execute(query)
 
             definition = {}
@@ -71,14 +115,20 @@ class MySQLDestination(Destination):
             key_order = [None] * len(known_stream_versions[name])
             template = {}
             for key in definition:
+                if definition[key]["key_index"] == -1:
+                    self.logger.warning("No key order specified for stream `%s`", name)
+                    key_order = []
+                    break
                 key_order[definition[key]["key_index"]] = key
                 template[key] = definition[key]["type"]
 
+            # create the struct format string to decode incoming data messages
             err, format_str = self.format_string(template, key_order)
             if err > 0:
                 format_str = ''
 
-            known_streams[name] = { # not including older versions since it is hard right now
+            # not including older versions since it is hard right now
+            known_streams[name] = {
                 "stream"     : name,
                 "id"         : id, 
                 "version"    : version, 
@@ -98,10 +148,13 @@ class MySQLDestination(Destination):
         stream = stream_obj["stream"]
         version = stream_obj["version"]
 
+        # add new stream to the current stream list
         if version == 1:
+            # if this a brand new stream, then add a new row
             query = """INSERT INTO origin_streams (name, version) VALUES (\"{}\",{})"""
             query = query.format(stream, version)
         else:
+            # if we are updating an existing stream, update the row
             query = "UPDATE origin_streams SET version={} WHERE name=\"{}\""
             query = query.format(version, stream) 
         cursor.execute(query)
@@ -111,42 +164,53 @@ class MySQLDestination(Destination):
         # overwrite streamID using the correct one
         self.known_streams[stream]['id'] = stream_id
 
+        # enter the stream template information into the origin_stream_fields table
         fields = []
         definition = stream_obj['definition']
         for field_name in definition.keys():
             idx = None
             field_type = definition[field_name]['type']
-            idx = definition[field_name]['keyIndex']
+            idx = definition[field_name]['key_index']
             try:
                 fields.append((field_name, data_types[field_type]["mysql"]))
             except KeyError:
                 pass
 
-            query = """INSERT INTO origin_stream_fields 
-                    VALUES ("{}","{}",{},"{}",{})"""
-            cursor.execute(query.format(stream, field_name, version, field_type, idx))
+            query = (
+                'INSERT INTO origin_stream_fields'
+                ' (stream_id, stream_name, field_name, version, field_type, key_index)'
+                ' VALUES ({},"{}","{}",{},"{}",{})'
+            ).format(stream_id, stream, field_name, version, field_type, idx)
+            self.logger.debug(query)
+            cursor.execute(query)
 
-        query = """CREATE TABLE IF NOT EXISTS measurements_{}_{} 
-                (id BIGINT NOT NULL AUTO_INCREMENT,{} """
-        query.format(stream, version, timestamp)
+        # make the new data stream table based on the template provided
+        query = (
+            "CREATE TABLE IF NOT EXISTS `measurements_{}_{}` ("
+            " `id` BIGINT NOT NULL AUTO_INCREMENT," # id field
+            " `{}` {}," # timestamp field
+        )
         try:
-            query += data_types[self.config.get("Server", "timestamp_type")]["mysql"]
+            ts_dtype = data_types[self.config.get("Server", "timestamp_type")]["mysql"]
         except KeyError:
-            query += "INT UNSIGNED"
-        query += ","
-
+            ts_dtype = "INT UNSIGNED"
+        query = query.format(stream, version, TIMESTAMP, ts_dtype)
 
         for i in range(0, len(fields)):
             f0, f1 = fields[i]
-            query += "{} {},".format(f0, f1)
-        query += "PRIMARY KEY (id))"
+            query += " `{}` {},".format(f0, f1)
+        query += "PRIMARY KEY (`id`))"
+        #self.logger.debug(query)
         cursor.execute(query)
+
+        # update pointer to the current version of the stream if it exists
         query = "DROP VIEW IF EXISTS measurements_{} ".format(stream)
         cursor.execute(query)
         query = """CREATE VIEW measurements_{} 
                 AS SELECT * FROM measurements_{}_{}""".format(stream, stream, version)
         cursor.execute(query)
         self.cnx.commit()
+        # should we close the cursor here?
         return stream_id
 
     def insert_measurement(self, stream, measurements):
@@ -165,9 +229,10 @@ class MySQLDestination(Destination):
         value_placeholders = "(" + ','.join(["%s"]*len(measurement_array)) + ")"
 
         version = self.known_streams[stream]["version"]
-        query = """INSERT INTO measurements_%s_%d %s VALUES %s"""
+        query = """INSERT INTO measurements_{}_{} {} VALUES {}"""
         query = query.format(stream, version, ''.join(fmt), value_placeholders)
-
+        self.logger.debug(query)
+        self.logger.debug(values)
         self.cursor.execute(query, values)
         self.cnx.commit()
 
@@ -175,16 +240,27 @@ class MySQLDestination(Destination):
     def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
         start, stop = self.validate_time_range(start, stop)
 
+        if stream not in self.known_streams:
+            msg = "Requested stream `{}` does not exist.".format(stream)
+            return (1, {}, msg)
+
         if definition is None:
             definition = self.known_stream_versions[stream]
+        else:
+            # check that the requestd fields are all in the stream defintion
+            for f in definition:
+                if f not in self.known_stream_versions[stream]:
+                    msg = "Requested stream field `{}.{}` does not exist.".format(stream, f)
+                    return (1, {}, msg)
         
         field_list = [field for field in definition]
+        field_list.append(TIMESTAMP)
         query = "SELECT %s FROM measurements_%s_%d WHERE %s BETWEEN %d AND %d"
         values = (
             ",".join(field_list),
             stream, 
             self.known_streams[stream]["version"], 
-            timestamp, 
+            TIMESTAMP, 
             start, 
             stop
         )
@@ -192,11 +268,20 @@ class MySQLDestination(Destination):
         self.cursor.execute(query % values)
 
         data = {}
+
         for field in field_list:
             data[field] = []
 
-        for row in self.cursor.fetchall():
+        results = self.cursor.fetchall()
+
+        err = 0
+        if self.cursor.rowcount <= 0:
+            msg = "Stream declared, but no data saved."
+            err = 1
+
+        for row in results:
             for i, field in enumerate(field_list):
                 data[field].append(row[i])
-
-        return data
+        if err == 0:
+            return (0, data, '')
+        return (1, {}, msg)

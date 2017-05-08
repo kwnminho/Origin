@@ -150,6 +150,7 @@ class Destination(object):
             format_str += data_types["uint"]["format_char"]
 
         for key in key_order:
+            self.logger.debug('key: %s', key)
             dtype = template[key]
             try:
                 format_str += data_types[dtype]["format_char"]

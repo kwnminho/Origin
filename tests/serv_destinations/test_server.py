@@ -9,7 +9,10 @@ import ConfigParser
 import struct
 import time
 
-import pytest 
+import pytest
+
+import mysql.connector
+from mysql.connector import errorcode
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
@@ -34,52 +37,89 @@ print(FULL_CFG_PATH)
 CONFIG = ConfigParser.ConfigParser()
 CONFIG.read(CONFIGFILE)
 
-CONFIG.set('Server', 'base_path', FULL_BASE_PATH) 
+CONFIG.set('Server', 'base_path', FULL_BASE_PATH)
+
+# I cant figure out how to get pytest to loop through multiple back end tests
+destination = 'mysql'
+
+def setup_module(self):
+    ''' runs before every parameterized function and initializes the destination'''
+    tmpdir = path.join(FULL_BASE_PATH, "var", "test")
+    CONFIG.set("Server", "var_path", tmpdir)
+    cleanup_mysql_database()
+
+def cleanup_mysql_database():
+    '''Deletes any tables in the database'''
+    logger.debug('Dropping the database now')
+    cnx = mysql.connector.connect(
+        user=CONFIG.get("MySQL", "user"),
+        password=CONFIG.get("MySQL", "password"),
+        host=CONFIG.get("MySQL", "server_ip")
+    )
+    cursor = cnx.cursor()
+    query = "DROP DATABASE {}".format(CONFIG.get("MySQL", "db"))
+    try:
+        cnx.database = CONFIG.get("MySQL", "db")
+        cursor.execute(query)
+    except mysql.connector.Error:
+        logger.exception('Unexpected error when attempting to cleanup test dbs')
+
+
+def insert_measurement(stream, template, method):
+    '''Sets up data and saves '''        
+    time64 = current_time(CONFIG) # 64b time
+    data = {TIMESTAMP: time64}
+    for key in template:
+        data[key] = random_data(template[key])
+    ret = method(stream, data)
+
+    if ret:
+        return ret, data
+    else:
+        return data
 
 class TestDest(object):
 
     def setup(self):
-        ''' runs before every parameterized function and initializes the destination'''
-        tmpdir = path.join(FULL_BASE_PATH, "var", "test")
-        CONFIG.set("Server", "var_path", tmpdir)
-        dest = CONFIG.get("Server", "destination").lower()
-        logger.debug("Testing with destination: %s", dest)
+        logger.debug("Testing with destination: %s", destination)
 
-        if  dest == "mysql":
+        if  destination == "mysql":
             from origin.server import MySQLDestination
             self.dest = MySQLDestination(logger, CONFIG)
 
-        elif dest == "hdf5":
+        elif destination == "hdf5":
             from origin.server import HDF5Destination
             self.dest = HDF5Destination(logger, CONFIG)
 
-        elif dest == "filesystem":
+        elif destination == "filesystem":
             from origin.server import FilesystemDestination
             self.dest = FilesystemDestination(logger, CONFIG)
 
-        elif dest == "mongodb":
+        elif destination == "mongodb":
             from origin.server import MongoDBDestination
             self.dest = MongoDBDestination(logger, CONFIG)
 
-        elif dest == '':
+        elif destination == '':
             logger.critical("No destination specified in configs. Killing server...")
             sys.exit(1)
             
         else:
-            logger.critical("Unrecognized destination %s specified. Killing server...", dest)
+            logger.critical("Unrecognized destination %s specified. Killing server...", destination)
             sys.exit(1)
 
     def teardown(self):
         ''' runs after every parameterized function and clears the datafile'''
         self.dest.close()
         data_path = CONFIG.get("Server", "var_path")
-        if CONFIG.get("Server", "destination") == "hdf5":
+        if destination == "hdf5":
             filename = path.join(
                 data_path, 
                 CONFIG.get("HDF5", "data_path"), 
                 CONFIG.get("HDF5", "data_file")
             )
             remove(filename)
+        if destination == 'mysql':
+            cleanup_mysql_database()
 
     def register_success(self, stream, template, key_order, id=1, ver=1):
         '''regsiter stream with server'''
@@ -90,19 +130,6 @@ class TestDest(object):
         # the stream and version numbers start at 1
         logger.info("version: %s", ver)
         assert idn == struct.pack("!II", id, ver)
-
-    def insert_measurement(self, stream, template, method):
-        '''Sets up data and saves '''        
-        time64 = current_time(CONFIG) # 64b time
-        data = {TIMESTAMP: time64}
-        for key in template:
-            data[key] = random_data(template[key])
-        ret = method(stream, data)
-
-        if ret:
-            return ret, data
-        else:
-            return data
 
     def read_success(self, stream, data_in, field=None, timestamp=True):
         '''Read out the data successfully and check the data for consistancy'''
@@ -116,23 +143,27 @@ class TestDest(object):
             fields = [field]
             result, ret_data, msg = self.dest.get_raw_stream_field_data(stream, field, start, stop)
 
+        logger.debug("data_in: %s", data_in)
+        logger.debug("data_out: %s", ret_data)
         logger.debug("fields: %s", fields)
+        logger.debug("msg: %s", msg)
         assert result == 0
         assert msg == ''
         if timestamp:
             assert data_in[TIMESTAMP] == long(ret_data[TIMESTAMP][0])
         for f in fields:
-            assert data_in[f] == ret_data[f][0]
+            # floats sometimes show up as doubles?
+            assert data_in[f] == pytest.approx(ret_data[f][0], 0.00001)
         return ret_data
 
-    @pytest.mark.parametrize("stream,template,key_order,expected_id,expected_ver", [
-        ("test", {'key1':'int', 'key2':'float'}, ['key1', 'key2'], 1, 1),
-        ("test_2", {'key3':'int8', 'key4':'float64'}, ['key3', 'key4'], 1, 1),
-        ("test_2", {'key3':'int8', 'key4':'float64'}, None, 1, 1),
-        ("tes54t_2", {'key3':'int16', 'key4':'string', '3':'double'}, ['key4', 'key3', '3'], 1, 1)
+    @pytest.mark.parametrize("stream,template,key_order", [
+        ("test", {'key1':'int', 'key2':'float'}, ['key1', 'key2']),
+        ("test_2", {'key3':'int8', 'key4':'float64'}, ['key3', 'key4']),
+        ("test_2", {'key3':'int8', 'key4':'float64'}, None),
+        ("tes54t_2", {'key3':'int16', 'key4':'string', '3':'double'}, ['key4', 'key3', '3'])
     ])
 
-    def test_register_streams(self, stream, template, key_order, expected_id, expected_ver):
+    def test_register_streams(self, stream, template, key_order):
         '''should successfully register streams'''
         self.register_success(stream, template, key_order)
 
@@ -191,7 +222,7 @@ class TestDest(object):
         # register stream
         self.register_success(stream, template, key_order)
         # insert measurement, no return value        
-        data = self.insert_measurement(stream, template, self.dest.insert_measurement)        
+        data = insert_measurement(stream, template, self.dest.insert_measurement)        
         self.read_success(stream, data)
         self.read_success(stream, data, field)
 
@@ -212,7 +243,7 @@ class TestDest(object):
         self.register_success(stream, template, key_order)
 
         # insert measurement, no return value        
-        ret, data = self.insert_measurement(
+        ret, data = insert_measurement(
             stream, 
             template, 
             self.dest.measurement
@@ -244,7 +275,7 @@ class TestDest(object):
         # change key name, to break
         field2 = 'key12'
         template2 = {field2: data_type}    
-        ret, data = self.insert_measurement(
+        ret, data = insert_measurement(
             stream, 
             template2, 
             self.dest.measurement
@@ -266,7 +297,7 @@ class TestDest(object):
         assert result == 1
         assert msg == "Stream declared, but no data saved."
         assert ret_data == {}
-  
+
     @pytest.mark.parametrize("data_type", [
         "int", "int8", "int16", "int32", "int64",
         "uint", "uint8", "uint16", "uint32", "uint64",
@@ -284,7 +315,7 @@ class TestDest(object):
         # register stream
         self.register_success(stream, template, key_order)
        
-        ret, data = self.insert_measurement(
+        ret, data = insert_measurement(
             stream, 
             template, 
             self.dest.measurement
@@ -318,8 +349,8 @@ class TestDest(object):
         stream, template, key_order = ("test", {field: data_type}, [field])
         # register stream
         self.register_success(stream, template, key_order)
-    
-        ret, data = self.insert_measurement(
+
+        ret, data = insert_measurement(
             stream, 
             template, 
             self.dest.measurement
@@ -336,4 +367,4 @@ class TestDest(object):
         ret_data = self.read_success(stream, data, field)   
         # within 1/4 of a second
         assert abs(long(ret_data[TIMESTAMP][0])-measurement[TIMESTAMP]) < 2**30
-              
+                  
