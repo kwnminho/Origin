@@ -3,8 +3,11 @@
 from __future__ import print_function
 
 import sys
+import os
 import zmq
 import json
+
+sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
 
 print('starting')
 
@@ -76,6 +79,7 @@ try:
             state_str += '0'
     state_str += ' )'
     print(state_str, end='\r')
+    #print(state_str)
 except KeyboardInterrupt:
   print("\nclosing...")
 
