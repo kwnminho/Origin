@@ -18,6 +18,8 @@ def random_data( dtype ):
         return random.random()
     elif (dtype == "float") or (dtype == "float32"):
         return float(np.float32(random.random())) # reduce accuracy so end2end testing is accurate
+    elif (dtype == "bool"):
+        return bool(np.random.choice(2))
     elif dtype == "string":
         length = int(data_types["string"]["numpy"][1:])
         return ''.join(random.choice(string.lowercase) for i in range(length))

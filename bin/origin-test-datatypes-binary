@@ -43,6 +43,7 @@ records={
     "toy_uint8":"uint8",
     "toy_float":"float",
     "toy_double":"double",
+    "toy_bool":"bool",
 }
 #keyOrder = records.keys() # if you want to be explicit
 
