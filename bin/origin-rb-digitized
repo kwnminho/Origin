@@ -1,0 +1,83 @@
+#!/usr/bin/env python
+
+from __future__ import print_function
+
+import sys
+import zmq
+import json
+
+print('starting')
+
+context = zmq.Context()
+
+info_socket = context.socket(zmq.REQ)
+info_socket.connect("tcp://hexlabmonitor.physics.wisc.edu:5561")
+#print("Asking server for a list of available streams")
+info_socket.send('{}')
+response = json.loads(info_socket.recv())
+info_socket.close()
+
+if response[0] != 0:
+  print('Server not happy. stopping ...')
+  print(response)
+  print(response[0])
+  sys.exit(1)
+
+print("Server responds with...")
+knownStreamVersions = response[1]["streams"]
+for k in knownStreamVersions:
+  print('stream: ', k, ',\tstreamID: ', knownStreamVersions[k]["id"])
+
+#print(response)
+print('')
+
+# set default stream to 0 or use specified stream
+stream_filter = sys.argv[1] if len(sys.argv) > 1 else '11'
+
+if stream_filter is None:
+  print('no stream specified. stopping ...')
+  sys.exit(0)
+
+sub_socket = context.socket(zmq.SUB)
+
+print("Collecting updates from data server...")
+sub_socket.connect("tcp://hexlabmonitor.physics.wisc.edu:5562")
+
+for sub_stream in knownStreamVersions.keys():
+  if knownStreamVersions[sub_stream]["id"] == int(stream_filter):
+    break
+
+stream_filter = stream_filter.zfill(4)
+print("subscribing to stream: %s [%s]" % (sub_stream, stream_filter) )
+
+# ascii to unicode str
+if isinstance(stream_filter, bytes):
+  stream_filter = stream_filter.decode('ascii')
+sub_socket.setsockopt_string(zmq.SUBSCRIBE, stream_filter)
+
+print("Current Digitization of Rb trap sites (shot0) : (shot1)")
+
+try:
+  while True:
+    [streamID, content] = sub_socket.recv_multipart()
+    data = json.loads(content)
+    #print("[%s] %s" % (streamID, data))
+    state_str = '( '
+    for i in range(5):
+        if data[str(i)]:
+            state_str += '1'
+        else:
+            state_str += '0'
+    state_str += ' ) : ( '
+    for i in range(5):
+        if data[str(5+i)]:
+            state_str += '1'
+        else:
+            state_str += '0'
+    state_str += ' )'
+    print(state_str, end='\r')
+except KeyboardInterrupt:
+  print("\nclosing...")
+
+sub_socket.close()
+context.term()
