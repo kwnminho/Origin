@@ -13,7 +13,7 @@ fullCfgPath  = os.path.join(fullBasePath, "config")
 sys.path.append(fullLibPath)
 
 from origin.client import server, random_data
-from origin import current_time, timestamp
+from origin import current_time, TIMESTAMP
 
 if len(sys.argv) > 1:
   if sys.argv[1] == 'test':
@@ -47,7 +47,7 @@ time.sleep(2)
 for i in range(3):
     print "sending...."
     t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
-    data = { timestamp: current_time(config), "toy1": t1, "toy2": t2 }
+    data = { TIMESTAMP: current_time(config), "toy1": t1, "toy2": t2 }
     connection.send(**data)
     print("toy1: {}\ntoy2: {}".format(t1,t2))
     time.sleep(1)
@@ -66,7 +66,7 @@ for i in range(3):
     print "sending...."
     t1,t2 = (makeTempMeasurement(), makeTempMeasurement())
     data = { 
-            timestamp: current_time(config), 
+            TIMESTAMP: current_time(config), 
             "toy1": t1, 
             "toy2": t2,
             "toy3": t2 

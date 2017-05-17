@@ -1,37 +1,42 @@
-from pymongo import MongoClient
+"""
+This module extends the Destination class to work with a mongo database.
+"""
+
 import pymongo
-from origin.server import destination
+
+from origin.server import Destination
 from origin import data_types, timestamp
-import ConfigParser
 
-class mongodb_destination(destination):
+class MongoDBDestination(Destination):
+    '''A class for storing data in a mongodb database.'''
+
     def connect(self):
-        self.client = MongoClient(
-            host=self.config.get("MongoDB","server_ip"),
-            port=self.config.getint("MongoDB","port")
+        self.client = pymongo.MongoClient(
+            host=self.config.get("MongoDB", "server_ip"),
+            port=self.config.getint("MongoDB", "port")
         )
-        self.db = self.client[self.config.get("MongoDB","db")]
+        self.db = self.client[self.config.get("MongoDB", "db")]
 
-    def readStreamDefTable(self):
-        knownStreams = {}
-        knownStreamVersions = {}
-        if "knownStreams" in self.db.collection_names():
-            for stream_obj in self.db.knownStreams.find():
-                knownStreams[stream_obj["stream"]] = stream_obj
-                knownStreamVersions[stream_obj["stream"]] = stream_obj["definition"]
+    def read_stream_def_table(self):
+        known_streams = {}
+        known_stream_versions = {}
+        if "known_streams" in self.db.collection_names():
+            for stream_obj in self.db.known_streams.find():
+                known_streams[stream_obj["stream"]] = stream_obj
+                known_stream_versions[stream_obj["stream"]] = stream_obj["definition"]
         else:
-            self.db.knownStreams.create_index([('id', pymongo.ASCENDING)], unique=True)
-        self.knownStreams = knownStreams
-        self.knownStreamVersions = knownStreamVersions
+            self.db.known_streams.create_index([('id', pymongo.ASCENDING)], unique=True)
+        self.known_streams = known_streams
+        self.known_stream_versions = known_stream_versions
 
-    def createNewStreamDestination(self,stream_obj):
-        streamID = stream_obj["id"]
+    def create_new_stream_destination(self, stream_obj):
+        stream_id = stream_obj["id"]
         # update/create document in db
-        self.db.knownStreams.replace_one({'id': streamID}, stream_obj, upsert=True)
-        return streamID
+        self.db.known_streams.replace_one({'id': stream_id}, stream_obj, upsert=True)
+        return stream_id
 
-    def insertMeasurement(self,stream,measurements):
-        stream_obj = self.knownStreams[stream]
+    def insert_measurement(self, stream, measurements):
+        stream_obj = self.known_streams[stream]
         stream_collection = "{}_{}".format(stream, stream_obj["version"])
         for key in measurements: # mongodb doesn't do unsigned ints, because its dumb
             if key != timestamp: # could be smarter about this, but I'm tired
@@ -39,31 +44,31 @@ class mongodb_destination(destination):
         self.db[stream_collection].insert_one(measurements)
 
     # read stream data from storage between the timestamps given by time = [start,stop]
-    def getRawStreamData(self,stream,start=None,stop=None,definition=None):
-        start, stop = self.validateTimeRange(start,stop)
+    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+        start, stop = self.validate_time_range(start, stop)
 
-        stream_obj = self.knownStreams[stream]
+        stream_obj = self.known_streams[stream]
         stream_collection = "{}_{}".format(stream, stream_obj["version"])
 
         if definition is None:
-            definition = self.knownStreams[stream]["definition"]
+            definition = self.known_streams[stream]["definition"]
 
-        fieldList = [ field for field in definition ]
+        field_list = [field for field in definition]
         data = {timestamp: []}
-        for field in fieldList:
+        for field in field_list:
             data[field] = []
 
-        results = self.db[stream_collection].find({ "$and": [
-            { timestamp: {"$gte": start} },
-            { timestamp: {"$lte": stop} }
+        results = self.db[stream_collection].find({"$and": [
+            {timestamp: {"$gte": start}},
+            {timestamp: {"$lte": stop}}
         ]})
 
         for meas in results:
-            for field in fieldList:
+            for field in field_list:
                 # recast to native type from string because mongo is stupid
-                dt = data_types[self.knownStreamVersions[stream][field]['type']]
-                data[field].append(dt['type'](meas[field]))
-            dt = data_types[self.config.get("Server","timestamp_type")]   
-            data[timestamp].append(dt['type'](meas[timestamp]))
+                dtype = data_types[self.known_stream_versions[stream][field]['type']]
+                data[field].append(dtype['type'](meas[field]))
+            dtype = data_types[self.config.get("Server", "timestamp_type")]   
+            data[timestamp].append(dtype['type'](meas[timestamp]))
 
         return data

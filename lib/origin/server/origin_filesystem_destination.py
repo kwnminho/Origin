@@ -1,100 +1,108 @@
-import json
-from origin.server import destination
-from origin import data_types, timestamp
+"""
+This module extends the Destination class to save data in a filesystem.
+"""
+
 import os
-import numpy as np
-import sys, traceback
+import json
 
-def getDirectoryList(dir):
-    return [ d for d in os.listdir(dir) if os.path.isdir(os.path.join(dir,d)) ]
+from origin.server import Destination
+from origin import data_types, TIMESTAMP
 
-def getCurrentStreamVersion(config,stream):
-    stream_path = config.get('FileSystem','data_path')
-    stream_path = os.path.join( config.get('Server', "var_path"), stream_path, stream )
-    with open(os.path.join(stream_path,'currentVersion.txt'), 'r') as f:
+def get_directory_list(dir_):
+    '''Returns a list of subdirectories'''
+    return [d for d in os.listdir(dir_) if os.path.isdir(os.path.join(dir_, d))]
+
+def get_current_stream_version(config, stream):
+    '''Reads the current version out a file and returns the path to the current version'''
+    stream_path = config.get('FileSystem', 'data_path')
+    stream_path = os.path.join(config.get('Server', "var_path"), stream_path, stream)
+    with open(os.path.join(stream_path, 'currentVersion.txt'), 'r') as f:
         version_dir = f.read().strip()
-    return os.path.join(stream_path,version_dir)
+    return os.path.join(stream_path, version_dir)
 
-class filesystem_destination(destination):
+class FilesystemDestination(Destination):
+    '''A class for storing data in an filesystem format.'''
+
     def connect(self):
-        self.data_path = self.config.get('FileSystem','data_path')
-        self.data_path = os.path.join( self.config.get('Server', "var_path"), self.data_path )
-        self.info_file = os.path.join( self.data_path, self.config.get('FileSystem','info_file') )
+        self.data_path = self.config.get('FileSystem', 'data_path')
+        self.data_path = os.path.join(self.config.get('Server', "var_path"), self.data_path)
+        self.info_file = os.path.join(self.data_path, self.config.get('FileSystem', 'info_file'))
         if not os.path.exists(self.data_path):
             os.makedirs(self.data_path)
             self.logger.info("Creating data directory at: " + self.data_path)
 
-    def readStreamDefTable(self):
-        knownStreams = {}
-        knownStreamVersions = {}
+    def read_stream_def_table(self):
+        known_streams = {}
+        known_stream_versions = {}
         try:
             with open(self.info_file, 'r') as f:
                 json_data = f.read()
-            knownStreams = json.loads(json_data)
+            known_streams = json.loads(json_data)
         except IOError:
             self.logger.debug("Info file `{}` not found".format(self.info_file))
-            knownStreams = {}
+            known_streams = {}
 
-        for stream in knownStreams:
-            knownStreamVersions[stream] = knownStreams[stream]['definition']
+        for stream in known_streams:
+            known_stream_versions[stream] = known_streams[stream]['definition']
 
-        self.knownStreams=knownStreams
-        self.knownStreamVersions=knownStreamVersions
+        self.known_streams = known_streams
+        self.known_stream_versions = known_stream_versions
         self.print_stream_info()
 
-    def createNewStreamDestination(self,stream_obj):
+    def create_new_stream_destination(self, stream_obj):
         stream = stream_obj["stream"]
         version = stream_obj["version"]
-        stream_path = os.path.join(os.path.join(self.data_path,stream))
+        stream_path = os.path.join(os.path.join(self.data_path, stream))
         if version == 1:    # create a new stream group under root
             os.mkdir(stream_path)
 
         # create a new subgroup for this instance of the current stream
         version_dir = stream + '_' + str(version)
-        stream_ver = os.path.join( stream_path, version_dir )
-        os.mkdir( os.path.join(stream_path, version_dir) )
+        #stream_ver = os.path.join(stream_path, version_dir)
+        os.mkdir(os.path.join(stream_path, version_dir))
         # point currentVersion.txt file at most current version
-        with open( os.path.join(stream_path, 'currentVersion.txt'), 'w' ) as f:
+        with open(os.path.join(stream_path, 'currentVersion.txt'), 'w') as f:
             f.write(version_dir)
         # update the main info file
         with open(self.info_file, 'w') as json_data:
-            json_data.write(json.dumps(self.knownStreams))
+            json_data.write(json.dumps(self.known_streams))
         # create the stream field definition dict file
-        with open( os.path.join(stream_path, version_dir, 'definition.json'), 'w' ) as f:
-            f.write( json.dumps(stream_obj['definition']) )
+        with open(os.path.join(stream_path, version_dir, 'definition.json'), 'w') as f:
+            f.write(json.dumps(stream_obj['definition']))
         return stream_obj['id']
 
-    def insertMeasurement(self,stream,measurements):
-        current_stream_version = getCurrentStreamVersion(self.config,stream)
+    def insert_measurement(self, stream, measurements):
+        current_stream_version = get_current_stream_version(self.config, stream)
         for field in measurements:
-            with open( os.path.join(current_stream_version, field), 'a' ) as f:
-                f.write( str(measurements[field]) + '\n')
+            with open(os.path.join(current_stream_version, field), 'a') as f:
+                f.write(str(measurements[field]) + '\n')
 
     # read stream data from storage between the timestamps given by time = [start,stop]
     # only takes timestamps in seconds
-    def getRawStreamData(self,stream,start=None,stop=None,definition=None):
-        start, stop = self.validateTimeRange(start,stop)
+    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+        start, stop = self.validate_time_range(start, stop)
         # get data from buffer
         try:
-            current_stream_version = getCurrentStreamVersion(self.config,stream)
+            current_stream_version = get_current_stream_version(self.config, stream)
         except IOError:
             self.logger.debug("Read requested on empty dataset. stream: {}", stream)
             raise IndexError
         if definition is None:
-            definition = self.knownStreamVersions[stream]
+            definition = self.known_stream_versions[stream]
 
         start_idx = None
         stop_idx = None
         try:
-            tsfile = os.path.join(current_stream_version,timestamp)
-            f = open(tsfile,'r')
+            tsfile = os.path.join(current_stream_version, TIMESTAMP)
+            f = open(tsfile, 'r')
             i = 0
-            data = { timestamp : [] }
-            dtype = data_types[self.config.get('Server','timestamp_type')]['type']
+            data = {TIMESTAMP : []}
+            dtype = data_types[self.config.get('Server', 'timestamp_type')]['type']
             while True:
                 x = f.readline()
                 x = x.strip()
-                if not x: break
+                if not x: 
+                    break
                 x = dtype(x) 
                 if (start_idx is None) and (x >= start):
                     start_idx = i
@@ -102,31 +110,31 @@ class filesystem_destination(destination):
                     stop_idx = i
                     break
                 if start_idx is not None:
-                    data[timestamp].append(x)
+                    data[TIMESTAMP].append(x)
                 i += 1
             if (start_idx is not None) and (stop_idx is None):
                 stop_idx = i
 
         except ValueError:
-            self.logger.error("Error casting timestamp to type long. x=`{}` in {}".format(x, tsfile))
-        except:
-            self.logger.error("Unexpected exception reading from data file. Message code:")
-            self.logger.error(traceback.print_exc(file=sys.stdout))
+            msg = "Error casting timestamp to type long. x=`{}` in {}"
+            self.logger.error(msg.format(x, tsfile))
+        except Exception:
+            self.logger.exception("Unexpected exception reading from data file. Message code:")
         finally:
             f.close()
 
         if (start_idx is None) or (stop_idx is None):
             msg = "error in indexing (index start, index stop): ({},{})"
-            self.logger.warning(msg.format(start_idx,stop_idx))
+            self.logger.warning(msg.format(start_idx, stop_idx))
             raise IndexError
 
-        self.logger.debug((start_idx,stop_idx))
+        self.logger.debug((start_idx, stop_idx))
         for field in definition:
             data[field] = []
-            dtype = self.knownStreamVersions[stream][field]['type']
+            dtype = self.known_stream_versions[stream][field]['type']
             type_cast = data_types[dtype]['type']
             try:
-                f = open(os.path.join(current_stream_version,field),'r')
+                f = open(os.path.join(current_stream_version, field), 'r')
                 i = 0
                 while i <= stop_idx:
                     x = f.readline()
@@ -137,8 +145,7 @@ class filesystem_destination(destination):
             except ValueError:
                 pass # reached EOF
             except:
-                self.logger.error("Unexpected exception reading from data file. Message code:")
-                self.logger.error(traceback.print_exc(file=sys.stdout))
+                self.logger.exception("Unexpected exception reading from data file. Message code:")
                 raise IndexError
             finally:
                 f.close()

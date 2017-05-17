@@ -7,7 +7,7 @@ import json
 context = zmq.Context()
 
 info_socket = context.socket(zmq.REQ)
-info_socket.connect("tcp://localhost:5559")
+info_socket.connect("tcp://34.208.238.89:5561")
 print("Asking server for a list of available streams")
 info_socket.send('{}')
 response = info_socket.recv()
@@ -20,7 +20,7 @@ info_socket.close()
 sub_socket = context.socket(zmq.SUB)
 
 print("Collecting updates from data server...")
-sub_socket.connect("tcp://localhost:5560")
+sub_socket.connect("tcp://34.208.238.89:5562")
 
 # set default stream to 0 or use specified stream
 stream_filter = sys.argv[1] if len(sys.argv) > 1 else '1'
