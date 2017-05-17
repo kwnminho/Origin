@@ -40,7 +40,7 @@ if stream_filter is None:
 sub_socket = context.socket(zmq.SUB)
 
 print("Collecting updates from data server...")
-sub_socket.connect("tcp://hexlabmonitor.physics.wisc.edu:5560")
+sub_socket.connect("tcp://hexlabmonitor.physics.wisc.edu:5562")
 
 for sub_stream in knownStreamVersions.keys():
   if knownStreamVersions[sub_stream]["id"] == int(stream_filter):
