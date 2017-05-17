@@ -14,7 +14,7 @@ fullCfgPath  = os.path.join(fullBasePath, "config")
 sys.path.append(fullLibPath)
 
 from origin.client import server, random_data
-from origin import current_time, timestamp
+from origin import current_time, TIMESTAMP
 
 if len(sys.argv) > 1:
   if sys.argv[1] == 'test':
@@ -43,6 +43,7 @@ records={
     "toy_uint8":"uint8",
     "toy_float":"float",
     "toy_double":"double",
+    "toy_bool":"bool",
 }
 #keyOrder = records.keys() # if you want to be explicit
 
@@ -57,7 +58,7 @@ time.sleep(2)
 
 while True:
     print "sending...."
-    data = {timestamp: current_time(config)}
+    data = {TIMESTAMP: current_time(config)}
     for entry in records:
         data[entry] = random_data( records[entry] )
     print data

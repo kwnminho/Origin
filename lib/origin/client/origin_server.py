@@ -3,7 +3,8 @@ from origin.client import server_connection
 from origin.client import float_field
 from origin.client import integer_field
 from origin.client import string_field
-from origin import data_types
+from origin import data_types, registration_validation
+
 
 import zmq
 import sys
@@ -49,31 +50,6 @@ def formatStreamDeclaration(stream,records,keyOrder,format):
     else:
         return declarationFormater(stream,sentDict,keyOrder)
 
-def simpleString(input):
-    invalidChars = set(string.punctuation.replace("_",""))
-    if any(char in invalidChars for char in input):
-        return 1
-    else:
-        return 0
-
-def validateStreamDeclaration(stream,template):
-    fields = template.keys()
-    error = False
-    for f in fields:
-        try:
-            data_types[template[f]]
-        except KeyError:
-            print("type {} not recognized".format(template[f]))
-            error = True
-        if simpleString(f) != 0:
-            print("Invalid field name: {}".format(f))
-            error = True
-    if simpleString(stream) != 0:
-        print("Invalid stream name: {}".format(stream))
-        error = True
-    if not error:
-        return 0
-    return 1
 
 class server:
     def __init__(self, config):
@@ -83,9 +59,9 @@ class server:
         return True
 
     def registerStream(self,stream,records,keyOrder=None,format=None,timeout=1000):
-        valid = validateStreamDeclaration(stream,records)
+        valid = registration_validation(stream, records, keyOrder)
 
-        if valid != 0:
+        if not valid:
             print "invalid stream declaration"
             return None
 
@@ -98,7 +74,7 @@ class server:
         context = zmq.Context()
         socket = context.socket(zmq.REQ)
         socket.setsockopt(zmq.RCVTIMEO,timeout)
-	socket.setsockopt(zmq.LINGER,0)  
+        socket.setsockopt(zmq.LINGER,0)  
         host = self.config.get('Server',"ip")
         socket.connect ("tcp://%s:%s" % (host,port))
 
@@ -112,14 +88,14 @@ class server:
             print "can't format stream into {}".format(format)
             return None
 
-	socket.send(registerComm,zmq.NOBLOCK)
+        socket.send(registerComm,zmq.NOBLOCK)
         try:
-	   confirmation = socket.recv()
-	except: 
-	   print("Problem registering stream: {}".format(stream))
-           print("Server did not respond in time")
-           exit(1)
-	returnCode, msg = confirmation.split(',',1)
+            confirmation = socket.recv()
+        except: 
+            print("Problem registering stream: {}".format(stream))
+            print("Server did not respond in time")
+            exit(1)
+        returnCode, msg = confirmation.split(',',1)
         print returnCode, msg
 
         if int(returnCode) != 0:
@@ -127,7 +103,7 @@ class server:
             print msg
             return None
 
-        version, streamID = struct.unpack("!II",msg)
+        streamID, version = struct.unpack("!II",msg)
         print("successfully registered with streamID: {}, version: {}".format(streamID,version))
         socket.close() # I 'm pretty sure we need this here
 
