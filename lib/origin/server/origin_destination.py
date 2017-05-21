@@ -341,6 +341,10 @@ class Destination(object):
                     'min': min
                 }
 
+        except KeyError:
+            msg = "stream name `%s` does not exist"
+            self.logger.debug(msg, stream)
+            result, data, result_text = (1, {}, msg % stream)
         except Exception:
             self.logger.exception("Exception in server code:")
             msg = "Could not process request."

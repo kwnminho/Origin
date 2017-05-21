@@ -8,6 +8,7 @@ context = zmq.Context()
 
 info_socket = context.socket(zmq.REQ)
 info_socket.connect("tcp://127.0.0.1:5561")
+info_socket.RCVTIMEO = 2000
 print("Asking server for a list of available streams")
 info_socket.send('{}')
 response = info_socket.recv()
