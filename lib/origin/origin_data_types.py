@@ -30,6 +30,9 @@ data_types["double"] = { "mysql":"DOUBLE", "numpy":"float64", "format_char":"d",
 data_types["float64"] = data_types["double"]
 data_types["float32"] = data_types["float"]
 
+### boolean types
+data_types["bool"] = { "mysql":"BOOL", "numpy":"bool_", "format_char":"?", "binary_allowed": True, "size": 1, "type": bool }
+
 ### other types
 ### max string size is fixed for hdf5 files, if you want to change it change "S10" to "Sx"
 data_types["string"] = { "mysql":"TEXT", "numpy":"S10", "format_char":"s", "binary_allowed": False, "size": None, "type": str }

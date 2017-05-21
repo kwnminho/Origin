@@ -43,6 +43,7 @@ records={
     "toy_float":"float",
     "toy_double":"double",
     "toy_string":"string",
+    "toy_bool":"bool",
 }
 
 # alert the server that we are going to be sending this type of data
