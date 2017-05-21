@@ -46,7 +46,7 @@ class HDF5Destination(Destination):
         try:
             known_streams = json.loads(self.hdf5_file.attrs['knownStreams'])
         except KeyError:
-            self.logger.debug("known_streams attribute not found") 
+            self.logger.debug("known_streams attribute not found")
             known_streams = {}
 
         for stream in known_streams:
@@ -72,7 +72,7 @@ class HDF5Destination(Destination):
 
         # data sets for each field plus the timestamp
         # also make a buffer dataset for each field a as a pseudo circular buffer
-        chunksize = (self.config.getint('HDF5', 'chunksize'),) 
+        chunksize = (self.config.getint('HDF5', 'chunksize'),)
         buff_size = chunksize
         #print buff_size
         tstype = self.config.get('Server', 'timestamp_type')
@@ -110,7 +110,7 @@ class HDF5Destination(Destination):
                 , dtype=dtype
                 , chunks=chunksize
             )
-    
+
         self.hdf5_file.attrs['knownStreams'] = json.dumps(self.known_streams)
         stream_ver.attrs['definition'] = json.dumps(self.known_stream_versions[stream])
         return stream_obj['id']
@@ -162,11 +162,11 @@ class HDF5Destination(Destination):
 
         if definition is None:
             definition = self.known_stream_versions[stream]
-            
+
         # read ring buffers and pointers in case the pointer advances during read
         raw_data = {}
         try:
-            raw_data[TIMESTAMP] = { 
+            raw_data[TIMESTAMP] = {
                 'pointer': stream_group.attrs['row_count_buffer'], # pointer in ring buffer
                 'array':  stream_group[TIMESTAMP + '_buffer']
             }
@@ -177,7 +177,7 @@ class HDF5Destination(Destination):
 
         try:
             for field in definition:
-                raw_data[field] = { 
+                raw_data[field] = {
                     'pointer': stream_group.attrs['row_count_buffer'], # pointer in ring buffer
                     'array':  stream_group[field + '_buffer']
                 }
@@ -203,10 +203,10 @@ class HDF5Destination(Destination):
                 raw_data[field] = raw_data[field]['array'][:pointer]
 
             raw_data = self.get_archived_stream_data(
-                stream_group, 
-                start, 
-                stop, 
-                raw_data, 
+                stream_group,
+                start,
+                stop,
+                raw_data,
                 definition
             )
 
@@ -218,7 +218,7 @@ class HDF5Destination(Destination):
                 array = raw_data[field]['array']
                 length = len(array)
                 # in the ring buffer the oldest data could have been overwritten during the read
-                if offset < 0:  
+                if offset < 0:
                     self.logger.debug("negative offset")
                     offset += length
                 raw_data[field] = np.concatenate((
@@ -251,7 +251,7 @@ class HDF5Destination(Destination):
             # json method cant handle numpy array
             data[field] = raw_data[field][idx_start:idx_stop].tolist()
         return (0, data, '')
-        
+
     def get_archived_stream_data(self, stream_group, start, stop, buffer_data, definition):
         '''get raw_data in range from the archived data'''
         time_dset = stream_group[TIMESTAMP]
@@ -264,10 +264,10 @@ class HDF5Destination(Destination):
         # make as big as it needs to be then resize
         old_data[TIMESTAMP] = np.zeros(row_pointer)
         for field in definition:
-            old_data[field] = np.zeros(row_pointer) 
+            old_data[field] = np.zeros(row_pointer)
         chunksize = self.config.getint('HDF5', 'chunksize')
         row_pointer -= chunksize
-        # pull data out by chunksize until the end of the data set, 
+        # pull data out by chunksize until the end of the data set,
         # or the start time has been reached
         while row_pointer >= 0:
             chunk = time_dset[row_pointer:row_pointer+chunksize]
@@ -281,6 +281,5 @@ class HDF5Destination(Destination):
                 for field in definition:
                     old_data[field] = np.concatenate((old_data[field][pnt:], buffer_data[field]))
                 break
-            pnt -= chunksize
+            row_pointer -= chunksize
         return old_data
-        

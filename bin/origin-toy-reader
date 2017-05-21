@@ -46,7 +46,7 @@ while True:
     response = socket.recv()
     print "sever responds with: "
     print response
-    print 
+    print
     time.sleep(10)
     if raw:
         raw = False
