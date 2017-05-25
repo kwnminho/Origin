@@ -1,6 +1,6 @@
 """
 This module provides the Destination class that holds all the basic API methods for interfacing
-with a destination. 
+with a destination.
 
 Destintations are databases, filesystems, specific file formats (HDF5, CSV), etc.
 """
@@ -16,7 +16,7 @@ from origin import data_types, current_time, TIMESTAMP, registration_validation
 ################################################################################
 #
 #   Metadata format:
-#   
+#
 #   knownStreams : {
 #       `stream name` : {
 #           stream     : `stream_name`,
@@ -32,8 +32,8 @@ from origin import data_types, current_time, TIMESTAMP, registration_validation
 #           versions    : { # optional dict of older versions, version number is the hash
 #               1   : `defintion_obj`, # see above for definition format
 #               2   : `defintion_obj`,
-#               ... 
-#           }            
+#               ...
+#           }
 #       },
 #       ...
 #   }
@@ -75,11 +75,11 @@ class Destination(object):
         raise NotImplementedError
 
     def read_stream_def_table(self):
-        '''reads stored metadata and fills into the knownStreams, and 
+        '''reads stored metadata and fills into the knownStreams, and
         knownStreamVersions dictionaries
         '''
         raise NotImplementedError
-    
+
     def create_new_stream(self, stream, version, template, key_order):
         '''Creates a new stream or creates a new version of a stream based on template.
         also enters format_str into the knownStreams dict.
@@ -107,18 +107,18 @@ class Destination(object):
         if version > 1:
             stream_obj = self.known_streams[stream]
         else:
-            stream_obj = { 
-                "stream"     : stream.strip(), 
-                "id"         : stream_id, 
+            stream_obj = {
+                "stream"     : stream.strip(),
+                "id"         : stream_id,
                 "versions"   : []
             }
 
         stream_obj["version"] = version
-        stream_obj["key_order"] = key_order 
+        stream_obj["key_order"] = key_order
         stream_obj["format_str"] = format_str
         stream_obj["definition"] = definition
         stream_obj["versions"].append({
-            "version"    : version, 
+            "version"    : version,
             "key_order"   : key_order,
             "format_str"  : format_str,
             "definition" : definition,
@@ -163,7 +163,7 @@ class Destination(object):
     # returns version and streamID
     def register_stream(self, stream, template, key_order=None):
         '''Register a new stream or new version of a new stream with the server.
-        Returns a tuple of (error, stream_ver) where error=0 for success, and 
+        Returns a tuple of (error, stream_ver) where error=0 for success, and
         stream_ver is a byte string that serves as a unique identifier.
         '''
         update = False
@@ -191,6 +191,8 @@ class Destination(object):
             if not valid:
                 return (1, msg)
             stream_id = self.create_new_stream(stream, dest_version, template, key_order)
+            if stream_id < 0:
+                return (1, 'server error')
             # update the current streams after all that
             self.read_stream_def_table()
         return (0, struct.pack("!II", stream_id, dest_version))
@@ -266,24 +268,24 @@ class Destination(object):
     def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
         '''read stream data from storage between the timestamps
         given by time = [start,stop]
-        Returns a tuple with (error, data, msg), error is 0 for success, 
+        Returns a tuple with (error, data, msg), error is 0 for success,
         msg holds error msg or '', data is dictionary with fields as the keys and
         data lists as the values
         '''
         raise NotImplementedError
-        
+
     def get_raw_stream_field_data(self, stream, field, start=None, stop=None):
-        '''read stream.field data from storage between the timestamps 
+        '''read stream.field data from storage between the timestamps
         given by time = [start,stop]
-        Returns a tuple with (error, data, msg), error is 0 for success, 
+        Returns a tuple with (error, data, msg), error is 0 for success,
         msg holds error msg or '', data is dictionary with fields as the keys and
         data lists as the values
         '''
-        return self.get_raw_stream_data(stream, start=start, stop=stop, definition={field:''}) 
+        return self.get_raw_stream_data(stream, start=start, stop=stop, definition={field:''})
 
     def get_stat_stream_data(self, stream, start=None, stop=None):
         '''Get statistics on the stream data during the time window time = [start, stop]
-        Returns a tuple with (error, data, msg), error is 0 for success, 
+        Returns a tuple with (error, data, msg), error is 0 for success,
         msg holds error msg or '', data is dictionary with fields as the keys and
         statistical data sub-dictionaries as the values
         '''
@@ -296,7 +298,7 @@ class Destination(object):
                 elif self.known_stream_versions[stream][field]['type'] == 'string':
                     data[field] = stream_data[field] # TODO: figure out how to handle this
                 else:
-                    # some stats need to be converted back to the native python 
+                    # some stats need to be converted back to the native python
                     # type for JSON serialization
                     dtype = data_types[self.known_stream_versions[stream][field]['type']]["type"]
                     avg = np.nanmean(stream_data[field])
@@ -305,8 +307,8 @@ class Destination(object):
                     min = dtype(np.nanmin(stream_data[field]))
                     data[field] = {
                         'average': avg,
-                        'standard_deviation': std, 
-                        'max': max, 
+                        'standard_deviation': std,
+                        'max': max,
                         'min': min
                     }
 
@@ -314,11 +316,11 @@ class Destination(object):
             self.logger.exception("Exception in server code:")
             msg = "Could not process request."
             result, data, result_text = (1, {}, msg)
-        
+
         return(result, data, result_text)
 
     def get_stat_stream_field_data(self, stream, field, start=None, stop=None):
-        '''get statistics on the stream.field data during the time window 
+        '''get statistics on the stream.field data during the time window
         time = [start, stop]
         '''
         try:
@@ -378,15 +380,15 @@ class Destination(object):
             self.logger.info("  stream_id: {}".format(self.known_streams[stream]['id']))
             for field_name in self.known_stream_versions[stream]:
                 self.logger.info("  field: {} ({})".format(
-                    field_name, 
+                    field_name,
                     self.known_stream_versions[stream][field_name]['type']
                     ))
         self.logger.info("")
 
     def get_stream_id(self, stream):
-        '''Generate a new stream id by dynamically checking the id of all 
+        '''Generate a new stream id by dynamically checking the id of all
         known streams and incrementing
-        ''' 
+        '''
         if stream in self.known_streams:
             return self.known_streams[stream]['id']
         stream_id = 0

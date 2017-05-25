@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+'''latency_sub sends a data stream with no timestamp where the data is the
+client timestamp. The server will timestamp the data when it comes in, and then
+send to a subscriber, started in a new thread.
+The subscriber packages the data up and sends it to the server.
+'''
+
+import sys
+import json
+import threading
+import itertools
+import zmq
+import os.path
+import time
+
+# first find ourselves
+fullBinPath  = os.path.join(os.getcwd(), sys.argv[0])
+fullBasePath = os.path.dirname(os.path.dirname(os.path.dirname(fullBinPath)))
+fullLibPath  = os.path.join(fullBasePath, "lib")
+fullCfgPath  = os.path.join(fullBasePath, "config")
+sys.path.append(fullLibPath)
+
+configfile = os.path.join(fullCfgPath, "latency-test.cfg")
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+config.read(configfile)
+
+from origin.client import server
+from origin import current_time, TIMESTAMP, data_types
+
+N = 10
+STREAM_NAME = "latency_" + config.get('Server', "destination")
+CLIENT_TS = "client_ts"
+SUB_STREAM_NAME = "latency_sub_" + config.get('Server', "destination")
+SUB_TS = "sub_ts"
+SERV_TS = "serv_ts"
+
+def sub_worker(config, streamID):
+    '''threadable subscriber'''
+    #logger.info("sub_worker thread started.  Waiting for pushed data...")
+    context = zmq.Context()
+    sub_socket = context.socket(zmq.SUB)
+    sub_socket.connect("tcp://{}:{}".format(
+        config.get('Server', "ip"),
+        config.get('Server', "pub_port")
+    ))
+    # subscribe to the data stream
+    stream_filter = str(streamID).zfill(4)
+    # ascii to unicode str
+    if isinstance(stream_filter, bytes):
+      stream_filter = stream_filter.decode('ascii')
+    sub_socket.setsockopt_string(zmq.SUBSCRIBE, stream_filter)
+
+    serv = server(config)
+    # register stream with server
+    connection = serv.registerStream(
+        stream=SUB_STREAM_NAME,
+        records={
+            SERV_TS: config.get('Server', "timestamp_type"),
+            SUB_TS: config.get('Server', "timestamp_type")
+        }
+    )
+
+    while True:
+        [streamID, content] = sub_socket.recv_multipart()
+        sub_ts = long(time.time()*2**32)
+        p_data = json.loads(content)
+        data = {
+            TIMESTAMP: p_data[CLIENT_TS],
+            SUB_TS: sub_ts,
+            SERV_TS: p_data[TIMESTAMP]
+        }
+        connection.send(**data)
+
+if __name__ == "__main__":
+    serv = server(config)
+    # register stream with server
+    connection = serv.registerStream(
+        stream=STREAM_NAME,
+        records={CLIENT_TS: config.get('Server', "timestamp_type")}
+    )
+    # subscribe to the stream in another thread
+    t = threading.Thread(target=sub_worker, args=(config, connection.streamID))
+    t.daemon = True
+    t.start()
+    # wait for the other thread to get its sht together
+    time.sleep(10)
+    start_ts = current_time(config)
+
+    for _ in itertools.repeat(None, N):
+        data = {CLIENT_TS: current_time(config)}
+        connection.send( **data )
+
+    end_ts = current_time(config)
+    connection.close()
+    time.sleep(10)
+    print("Data in time window: [ {} , {} ]".format(start_ts, end_ts))
