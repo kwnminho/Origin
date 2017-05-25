@@ -422,10 +422,7 @@ def main():
   logger.info("IOLoop Configured")
 
   # Start the event loop
-  try:
-      ioloop.IOLoop.instance().start()
-  except KeyboardInterrupt:
-      context.destroy()
+  ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
   main()

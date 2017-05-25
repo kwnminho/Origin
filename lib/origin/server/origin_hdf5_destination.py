@@ -95,21 +95,25 @@ class HDF5Destination(Destination):
         template = stream_obj['definition']
         for field in template:
             dtype = data_types[template[field.strip()]['type']]['numpy']
-            stream_ver.create_dataset(
-                field
-                , chunksize
-                , maxshape=(None,)
-                , dtype=dtype
-                , chunks=chunksize
-                , compression=compression
-            )
-            stream_ver.create_dataset(
-                field + "_buffer"
-                , buff_size
-                , maxshape=buff_size
-                , dtype=dtype
-                , chunks=chunksize
-            )
+            try:
+                stream_ver.create_dataset(
+                    field
+                    , chunksize
+                    , maxshape=(None,)
+                    , dtype=dtype
+                    , chunks=chunksize
+                    , compression=compression
+                )
+                stream_ver.create_dataset(
+                    field + "_buffer"
+                    , buff_size
+                    , maxshape=buff_size
+                    , dtype=dtype
+                    , chunks=chunksize
+                )
+            except RuntimeError:
+                self.logger.exception("Server error occured.")
+                return -1
 
         self.hdf5_file.attrs['knownStreams'] = json.dumps(self.known_streams)
         stream_ver.attrs['definition'] = json.dumps(self.known_stream_versions[stream])
