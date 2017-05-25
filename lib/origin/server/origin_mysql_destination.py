@@ -55,6 +55,7 @@ class MySQLDestination(Destination):
         self.cnx.close()
 
     def read_stream_def_table(self):
+        # make a table for the list of streams
         stream_creation = (
             "CREATE TABLE IF NOT EXISTS `origin_streams` ( "
             " `id` INT NOT NULL AUTO_INCREMENT,"
@@ -64,6 +65,7 @@ class MySQLDestination(Destination):
             " ) "
         )
 
+        # make a table for all the stream fields
         stream_field_creation = (
             "CREATE TABLE IF NOT EXISTS"
             " `origin_stream_fields` ("
@@ -187,7 +189,7 @@ class MySQLDestination(Destination):
         # make the new data stream table based on the template provided
         query = (
             "CREATE TABLE IF NOT EXISTS `measurements_{}_{}` ("
-            " `id` BIGINT NOT NULL AUTO_INCREMENT," # id field
+            #" `id` BIGINT NOT NULL AUTO_INCREMENT," # id field
             " `{}` {}," # timestamp field
         )
         try:
@@ -199,7 +201,7 @@ class MySQLDestination(Destination):
         for i in range(0, len(fields)):
             f0, f1 = fields[i]
             query += " `{}` {},".format(f0, f1)
-        query += "PRIMARY KEY (`id`))"
+        query += "PRIMARY KEY (`{}`))".format(TIMESTAMP)
         #self.logger.debug(query)
         cursor.execute(query)
 
