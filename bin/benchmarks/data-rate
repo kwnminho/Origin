@@ -12,6 +12,7 @@ import itertools
 import zmq
 import os.path
 import time
+import numpy as np
 
 # first find ourselves
 fullBinPath  = os.path.join(os.getcwd(), sys.argv[0])
@@ -31,10 +32,8 @@ from origin.client import server
 from origin import current_time, TIMESTAMP, data_types
 
 N = 10
-STREAM_NAME = "latency_" + config.get('Server', "destination")
+STREAM_NAME = "datarate_" + config.get('Server', "destination")
 CLIENT_TS = "client_ts"
-SUB_STREAM_NAME = "latency_sub_" + config.get('Server', "destination")
-SUB_TS = "sub_ts"
 SERV_TS = "serv_ts"
 
 def sub_worker(config, streamID):
@@ -53,26 +52,10 @@ def sub_worker(config, streamID):
       stream_filter = stream_filter.decode('ascii')
     sub_socket.setsockopt_string(zmq.SUBSCRIBE, stream_filter)
 
-    serv = server(config)
-    # register stream with server
-    connection = serv.registerStream(
-        stream=SUB_STREAM_NAME,
-        records={
-            SERV_TS: config.get('Server', "timestamp_type"),
-            SUB_TS: config.get('Server', "timestamp_type")
-        }
-    )
-
-    while True:
+    i = 0
+    while i<N:
         [streamID, content] = sub_socket.recv_multipart()
-        sub_ts = long(time.time()*2**32)
-        p_data = json.loads(content)
-        data = {
-            TIMESTAMP: p_data[CLIENT_TS],
-            SUB_TS: sub_ts,
-            SERV_TS: p_data[TIMESTAMP]
-        }
-        connection.send(**data)
+        i += 1
 
     sub_socket.close()
 
@@ -88,16 +71,47 @@ if __name__ == "__main__":
     t.daemon = True
     t.start()
     # wait for the other thread to get its sh?t together
-    time.sleep(10)
+    time.sleep(3)
     start_ts = current_time(config)
 
     for _ in itertools.repeat(None, N):
         data = {CLIENT_TS: current_time(config)}
         connection.send( **data )
-        time.sleep(0.1) # wait long enough that the last data set shold be completed
+        # no waiting for data rate
 
     end_ts = current_time(config)
     connection.close()
-    time.sleep(10)
+    time.sleep(N*0.04)
     print("Data in time window: [ {} , {} ]".format(start_ts, end_ts))
+
+    host = config.get('Server','ip')
+    port = config.get('Server','read_port')
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://%s:%s" % (host,port))
+    print "sending read request for stream: `{}`....".format(STREAM_NAME)
+    start = long(float(start_ts)/2**32)
+    request_obj = { 'stream': STREAM_NAME, 'raw': True, 'start': start}
+
+    socket.send(json.dumps(request_obj))
+    response = json.loads(socket.recv())[1]
+
+    d_len = len(response[TIMESTAMP])
+    print "sever responds with: {} data".format(d_len)
+    fn = '-'.join([STREAM_NAME, str(start)])+'.json'
+    print "saving data to file: `{}`".format(fn)
+    with open(fn, 'w') as outfile:
+        json.dump(response, outfile)
+
+    dt_sec = float(max(response[CLIENT_TS]) - min(response[CLIENT_TS]))/2**32
+    d_rate = float(d_len)/dt_sec
+    print "client data production rate: {} 1/s".format(d_rate)
+
+    client_ts = np.array(response[CLIENT_TS])
+    server_ts = np.array(response[TIMESTAMP])
+
+    dt_sec = float(max(server_ts) - min(server_ts))/2**32
+    d_rate = float(d_len)/dt_sec
+    print "server data processing rate: {} 1/s".format(d_rate)
+    print "server data processing time: {} ms".format(1000.0/d_rate)
 
