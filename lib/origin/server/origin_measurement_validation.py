@@ -9,9 +9,9 @@ from origin import data_types, TIMESTAMP
 def measurement_validation(measurement, template):
     '''making sure stream data matches the template'''
     meas = measurement
-    meas.pop(TIMESTAMP, 0)
     meas_keys = meas.keys()
     meas_keys.sort()
+    meas_keys.remove(TIMESTAMP)
     template_keys = template.keys()
     template_keys.sort()
     if meas_keys != template_keys:
