@@ -1,0 +1,54 @@
+#!/usr/bin/env python
+
+import sys
+import os
+import random
+import time
+import zmq
+import json
+
+# first find ourself
+fullBinPath  = os.path.abspath(os.getcwd() + "/" + sys.argv[0])
+fullBasePath = os.path.dirname(os.path.dirname(fullBinPath))
+fullLibPath  = os.path.join(fullBasePath, "lib")
+fullCfgPath  = os.path.join(fullBasePath, "config")
+sys.path.append(fullLibPath)
+
+from origin.client import server
+from origin import current_time
+
+if len(sys.argv) > 1:
+  if sys.argv[1] == 'test':
+    configfile = os.path.join(fullCfgPath, "origin-server-test.cfg")
+  else:
+    configfile = os.path.join(fullCfgPath, sys.argv[1])
+else:
+  configfile = os.path.join(fullCfgPath, "origin-server.cfg")
+
+import ConfigParser
+config = ConfigParser.ConfigParser()
+config.read(configfile)
+
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+host = config.get('Server','ip')
+port = config.get('Server','read_port')
+socket.connect("tcp://%s:%s" % (host,port))
+
+time.sleep(5)
+raw=False
+
+while True:
+    print "sending read request...."
+    start = int(time.time()) - 20 # 20 s of data
+    request_obj = { 'stream': 'toy', 'field': 'toy1', 'raw': raw, 'start': start}
+    socket.send(json.dumps(request_obj))
+    response = socket.recv()
+    print "sever responds with: "
+    print response
+    print
+    time.sleep(10)
+    if raw:
+        raw = False
+    else:
+        raw = True
