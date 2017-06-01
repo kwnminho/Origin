@@ -227,3 +227,13 @@ and the monitoring device:
 ```bash
 python bin/origin-toy-client
 ```
+
+## Possible destinations (backends)
+
+### SQL
+* mapd
+
+### NoSQL
+* Cassandra
+* Riak
+* HBase
