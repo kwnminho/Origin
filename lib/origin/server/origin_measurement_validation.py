@@ -1,5 +1,5 @@
 """
-Function for making sure stream data matches the template 
+Function for making sure stream data matches the template
 """
 
 from origin import data_types, TIMESTAMP
@@ -11,7 +11,10 @@ def measurement_validation(measurement, template):
     meas = measurement
     meas_keys = meas.keys()
     meas_keys.sort()
-    meas_keys.remove(TIMESTAMP)
+    try:
+        meas_keys.remove(TIMESTAMP)
+    except ValueError:
+        pass 
     template_keys = template.keys()
     template_keys.sort()
     if meas_keys != template_keys:
@@ -28,4 +31,3 @@ def measurement_validation(measurement, template):
             #logger.error(msg.format(measurement[field_name], data_types[field_type_name["type"]]))
             return False
     return True
-            

@@ -72,9 +72,9 @@ mysql -u root -p
 ```
 
 ```sql
-CREATE DATABASE origintest;
+CREATE DATABASE origin_test;
 CREATE USER '_user_'@'localhost' IDENTIFIED BY '_password_';
-GRANT ALL PRIVILEGES ON origintest.* to '_user_'@'localhost';
+GRANT ALL PRIVILEGES ON origin_test.* to '_user_'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
