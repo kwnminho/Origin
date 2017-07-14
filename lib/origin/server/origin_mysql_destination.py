@@ -249,27 +249,26 @@ class MySQLDestination(Destination):
         cursor.close()
 
     # read stream data from storage between the timestamps given by time = [start,stop]
-    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+    def get_raw_stream_data(self, stream, start=None, stop=None, fields=[]):
         start, stop = self.validate_time_range(start, stop)
 
         if stream not in self.known_streams:
             msg = "Requested stream `{}` does not exist.".format(stream)
             return (1, {}, msg)
 
-        if definition is None:
-            definition = self.known_stream_versions[stream]
+        if fields == []:
+            fields = self.known_stream_versions[stream].keys()
         else:
             # check that the requestd fields are all in the stream defintion
-            for f in definition:
+            for f in fields:
                 if f not in self.known_stream_versions[stream]:
                     msg = "Requested stream field `{}.{}` does not exist.".format(stream, f)
                     return (1, {}, msg)
 
-        field_list = [field for field in definition]
-        field_list.append(TIMESTAMP)
+        fields.append(TIMESTAMP)
         query = "SELECT %s FROM measurements_%s_%d WHERE %s BETWEEN %d AND %d"
         values = (
-            ",".join(field_list),
+            ",".join(fields),
             stream,
             self.known_streams[stream]["version"],
             TIMESTAMP,
@@ -282,7 +281,7 @@ class MySQLDestination(Destination):
 
         data = {}
 
-        for field in field_list:
+        for field in fields:
             data[field] = []
 
         results = cursor.fetchall()
@@ -294,7 +293,7 @@ class MySQLDestination(Destination):
         cursor.close()
 
         for row in results:
-            for i, field in enumerate(field_list):
+            for i, field in enumerate(fields):
                 data[field].append(row[i])
         if err == 0:
             return (0, data, '')

@@ -328,7 +328,7 @@ class Destination(object):
                 return stream
         raise ValueError
 
-    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+    def get_raw_stream_data(self, stream, start=None, stop=None, fields=[]):
         """!@brief Read stream data from storage between the timestamps given by
         time = [start,stop].
 
@@ -338,8 +338,8 @@ class Destination(object):
         @param start 32b unix timestamp that defines the start of the data
             window
         @param stop 32b unix timestamp that defines the end of the data window
-        @param definition a dictionary that contains the fields for which data
-            is desired, the value of the dictionary key is arbitrary.
+        @param fields A list that contains the fields for which data is 
+            desired, the value of the dictionary key is arbitrary.
         @return a tuple with (error, data, msg)
             error: 0 for a successful operation
             data: data is dictionary with fields as the keys and data lists as
@@ -348,24 +348,7 @@ class Destination(object):
         """
         raise NotImplementedError
 
-    def get_raw_stream_field_data(self, stream, field, start=None, stop=None):
-        """!@brief Read specific field data from a stream between the timestamps given
-        by time = [start,stop].
-
-        @param stream a string holding the stream name
-        @param field a string holding the desired field name
-        @param start 32b unix timestamp that defines the start of the data
-            window
-        @param stop 32b unix timestamp that defines the end of the data window
-        @return a tuple with (error, data, msg)
-            error: 0 for a successful operation
-            data: data is dictionary with fields as the keys and data lists as
-                the values
-            msg: holds an error msg or '' if no error
-        """
-        return self.get_raw_stream_data(stream, start=start, stop=stop, definition={field: ''})
-
-    def get_stat_stream_data(self, stream, start=None, stop=None):
+    def get_stat_stream_data(self, stream, start=None, stop=None, fields=[]):
         """!@brief Get statistics on the stream data during the time window defined by
         time = [start, stop].
 
@@ -373,6 +356,8 @@ class Destination(object):
         @param start 32b unix timestamp that defines the start of the data
             window
         @param stop 32b unix timestamp that defines the end of the data window
+        @param fields A list that contains the fields for which data is 
+            desired, the value of the dictionary key is arbitrary.
         @return a tuple with (error, data, msg)
             error: 0 for a successful operation
             data: data is dictionary with fields as the keys and statistical
@@ -380,7 +365,12 @@ class Destination(object):
             msg: holds an error msg or '' if no error
         """
         try:
-            result, stream_data, result_text = self.get_raw_stream_data(stream, start, stop)
+            result, stream_data, result_text = self.get_raw_stream_data(
+                stream, 
+                start=start,
+                stop=stop,
+                fields=fields
+            )
             data = {}
             for field in stream_data:
                 if field == TIMESTAMP:
@@ -405,49 +395,6 @@ class Destination(object):
                         'max': max,
                         'min': min
                     }
-
-        except Exception:
-            self.logger.exception("Exception in server code:")
-            msg = "Could not process request."
-            result, data, result_text = (1, {}, msg)
-
-        return(result, data, result_text)
-
-    def get_stat_stream_field_data(self, stream, field, start=None, stop=None):
-        """!@brief Get statistics for a specific field from a stream during the time
-        window defined by time = [start, stop].
-
-        @param stream a string holding the stream name
-        @param field a string holding the desired field name
-        @param start 32b unix timestamp that defines the start of the data
-            window
-        @param stop 32b unix timestamp that defines the end of the data window
-        @return a tuple with (error, data, msg)
-            error: 0 for a successful operation
-            data: data is dictionary with fields as the keys and statistical
-                data sub-dictionaries as the values
-            msg: holds an error msg or '' if no error
-        """
-        try:
-            result, field_data, result_text = self.get_raw_stream_field_data(stream, field, start, stop)
-            data = {}
-            if self.known_stream_versions[stream][field]['type'] == 'string':
-                # TODO: figure out how to handle strings
-                data[field] = field_data[field]
-            else:
-                # some stats need to be converted back to the native python
-                # type for JSON serialization
-                dtype = data_types[self.known_stream_versions[stream][field]['type']]["type"]
-                avg = np.nanmean(field_data[field])
-                std = np.nanstd(field_data[field])
-                max = dtype(np.nanmax(field_data[field]))
-                min = dtype(np.nanmin(field_data[field]))
-                data[field] = {
-                    'average': avg,
-                    'standard_deviation': std,
-                    'max': max,
-                    'min': min
-                }
 
         except Exception:
             self.logger.exception("Exception in server code:")
