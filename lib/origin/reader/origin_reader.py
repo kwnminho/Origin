@@ -79,7 +79,11 @@ class Reader(object):
             'raw'   : raw,
         }
         if fields != []:
-            request['fields'] = fields
+            if self.is_fields(stream, fields):
+                request['fields'] = fields
+            else:
+                log.error('There was an issue with the specified fields.')
+                return {}
         self.socket.send(json.dumps(request))
         try:
             msg = self.socket.recv()
@@ -126,12 +130,26 @@ class Reader(object):
         """
         return self.get_stream_data(stream, start=start, stop=stop, fields=fields, raw=False)
 
+    def is_fields(self, stream, fields):
+        """!@brief Check that all the requested fields exist in the stream.
+
+        @param stream A string holding the stream name
+        @param fields A list of strings holding the field names
+        @return True if fields are defined in stream, False otherwise
+        """
+        ok = True
+        for field in fields:
+            if field in self.known_streams[stream]:
+                ok = False
+                msg = "field: `{}` not listed in known_streams['{}']"
+                log.warning(msg.format(field, stream))
+        return ok
+
     def is_stream(self, stream):
         """!@brief Check that the requested stream exists on the server.
 
-
         @param stream A string holding the stream name
-        @return True if stream is in known_stream, False otherwise
+        @return True if stream is in known_streams, False otherwise
         """
         return stream.strip() in self.stream_list
 
