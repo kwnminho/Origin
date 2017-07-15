@@ -11,7 +11,7 @@ fullLibPath  = os.path.join(fullBasePath, "lib")
 fullCfgPath  = os.path.join(fullBasePath, "config")
 sys.path.append(fullLibPath)
 
-from origin.reader import Reader
+from origin.client.origin_reader import Reader
 
 if len(sys.argv) > 1:
   if sys.argv[1] == 'test':
