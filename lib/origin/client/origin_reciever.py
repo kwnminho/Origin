@@ -5,9 +5,6 @@ extended by reader and subscriber classes
 
 import zmq
 import json
-import logging
-
-log = logging.getLogger(__name__)
 
 
 class Reciever(object):
@@ -16,7 +13,7 @@ class Reciever(object):
     This class handles asynchronous read events with a data server.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, logger):
         """!@brief Initialize the subscriber
 
         @param config is a ConfigParser object
@@ -24,6 +21,7 @@ class Reciever(object):
         self.config = config
         self.known_streams = {}
         self.stream_list = []
+        self.log = logger
         self.setup()
 
     def close(self):
@@ -41,7 +39,7 @@ class Reciever(object):
         try:
             socket.connect("tcp://{}:{}".format(self.ip, port))
         except:
-            log.exception("Error connecting to data server")
+            self.log.exception("Error connecting to data server")
 
     def get_available_streams(self):
         """!@brief Request the knownStreams object from the server.
@@ -54,7 +52,7 @@ class Reciever(object):
         try:
             err, known_streams = json.loads(self.read_sock.recv())
         except:
-            log.exception("Error connecting to data server")
+            self.log.exception("Error connecting to data server")
         else:
             self.update_known_streams(known_streams['streams'])
         return self.known_streams
@@ -71,7 +69,7 @@ class Reciever(object):
             if field in self.known_streams[stream]:
                 ok = False
                 msg = "field: `{}` not listed in known_streams['{}']"
-                log.warning(msg.format(field, stream))
+                self.log.warning(msg.format(field, stream))
         return ok
 
     def is_stream(self, stream):
@@ -90,11 +88,12 @@ class Reciever(object):
         self.ip = self.config.get('Server', 'ip')
         # save all ports, we dont want to expose the JSON ports
         self.read_port = self.config.getint('Server', 'read_port')
-        self.pub_port = self.config.getint('Server', 'pub_port')
+        self.sub_port = self.config.getint('Server', 'pub_port')
         self.alert_port = self.config.getint('Server', 'alert_port')
         self.register_port = self.config.getint('Server', 'register_port')
         self.measure_port = self.config.getint('Server', 'measure_port')
         self.timeout = self.config.getint('Reader', 'timeout')
+        self.filter_len = self.config.getint('Subscriber', 'filter_len')
         # initialize the possible sockets
         self.context = zmq.Context()
         self.read_sock = self.context.socket(zmq.REQ)

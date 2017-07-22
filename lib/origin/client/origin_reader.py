@@ -4,11 +4,8 @@ methods for subscribing to a data stream.
 """
 
 import json
-import logging
 
 import origin_reciever as reciever
-
-log = logging.getLogger()
 
 
 class Reader(reciever.Reciever):
@@ -17,13 +14,13 @@ class Reader(reciever.Reciever):
     This class handles asynchronous read events with a data server.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, logger):
         """!@brief Initialize the subscriber
 
         @param config is a ConfigParser object
         """
         # call the parent class initialization
-        super(Reader, self).__init__(config)
+        super(Reader, self).__init__(config, logger)
         # we only need the read socket for this class
         self.connect(self.read_sock, self.read_port)
         # request the available streams from the server
@@ -54,7 +51,7 @@ class Reader(reciever.Reciever):
             if self.is_fields(stream, fields):
                 request['fields'] = fields
             else:
-                log.error('There was an issue with the specified fields.')
+                self.log.error('There was an issue with the specified fields.')
                 return {}
         self.read_sock.send(json.dumps(request))
         try:
@@ -62,15 +59,15 @@ class Reader(reciever.Reciever):
             data = json.loads(msg)
         except:
             msg = "There was an error communicating with the server"
-            log.exception(msg)
+            self.log.exception(msg)
             data = (1, {'error': msg, 'stream': {}})
 
         if data[0] != 0:
             msg = "The server responds to the request with error message: `{}`"
-            log.error(msg.format(data[1]["error"]))
+            self.log.error(msg.format(data[1]["error"]))
             known_streams = data[1]['stream']
             if known_streams != {}:
-                log.info('Updating stream definitions from server.')
+                self.log.info('Updating stream definitions from server.')
                 self.update_known_streams(known_streams)
             return {}
         else:
