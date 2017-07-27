@@ -22,15 +22,6 @@ def sub_print(stream_id, data, log):
     log.info("[{}]: {}".format(stream_id, data))
 
 
-#    def register_subscription(self, stream_filter, callback):
-#        # add the callback to the list of things to do for the stream
-#        if stream_filter in self.subscriptions:
-#            self.subscriptions[stream_filter].append(callback)
-#        else:
-#            self.subscriptions[stream_filter] = [callback]
-#        self.log.info("subscriptions: {}".format(self.subscriptions))
-
-
 def poller_loop(sub_addr, queue, log):
     # a hash table (dict) of callbacks to perform when a message is recieved
     # the hash is the data stream filter, the value is a list of callbacks
@@ -46,6 +37,7 @@ def poller_loop(sub_addr, queue, log):
             log.info(cmd)
             if cmd['action'] == 'SHUTDOWN':
                 break
+
             if cmd['action'] == 'SUBSCRIBE':
                 msg = 'Subscribing with stream filter: [{}]'
                 stream_filter = cmd['stream_filter']
@@ -58,6 +50,17 @@ def poller_loop(sub_addr, queue, log):
                     sub_sock.setsockopt_string(zmq.SUBSCRIBE, stream_filter)
 
                 log.info("subscriptions: {}".format(subscriptions))
+
+            if (cmd['action'] == 'UNSUBSCRIBE' or
+                    cmd['action'] == 'REMOVE_ALL_CBS'):
+                msg = 'Unsubscribing to stream filter: [{}]'
+                log.info(msg.format(cmd['stream_filter']))
+                sub_sock.setsockopt_string(zmq.UNSUBSCRIBE, stream_filter)
+
+            if cmd['action'] == 'REMOVE_ALL_CBS':
+                msg = 'Removing all callbacks for stream filter: [{}]'
+                log.info(msg.format(cmd['stream_filter']))
+                del subscriptions[cmd['stream_filter']]
 
         except multiprocessing.queues.Empty:
             pass
@@ -104,9 +107,6 @@ class Subscriber(reciever.Reciever):
         self.connect(self.read_sock, self.read_port)
         # request the available streams from the server
         self.get_available_streams()
-        # list of data stream subscriptions and callbacks
-        #self.manager = multiprocessing.Manager()
-        #self.subscriptions = self.manager.dict()
         # set up queue for inter-process communication
         self.queue = multiprocessing.Queue()
         # start process
@@ -130,6 +130,9 @@ class Subscriber(reciever.Reciever):
         You can also register multiple callbacks for the same stream, by
         calling subscribe again.
 
+        The callback has to be a standalone function, not a class method or it
+        will throw an error.
+
         @param stream A string holding the stream name
         @param callback A callback function that expects a python dict with
             data
@@ -150,12 +153,13 @@ class Subscriber(reciever.Reciever):
             callback = sub_print
 
         # send subscription info to the poller loop
-        #self.register_subscription(stream_filter, callback)
-        self.queue.put({
+        cmd = {
             'action'        : 'SUBSCRIBE',
             'stream_filter' : stream_filter,
             'callback'      : callback
-        })
+        }
+        self.log.info('sending cmd to process: {}'.format(cmd))
+        self.queue.put(cmd)
 
     def get_stream_filter(self, stream):
         """!@brief Make the appropriate stream filter to subscribe to a stream
@@ -180,7 +184,10 @@ class Subscriber(reciever.Reciever):
         @param stream A string holding the stream name
         """
         stream_filter = self.get_stream_filter(stream)
-        del self.subscriptions[stream_filter]
+        self.queue.put({
+            'action'        : 'REMOVE_ALL_CBS',
+            'stream_filter' : stream_filter
+        })
 
     def unsubscribe(self, stream):
         """Unsubscribe from stream at the publisher.
@@ -191,4 +198,7 @@ class Subscriber(reciever.Reciever):
         @param stream A string holding the stream name
         """
         stream_filter = self.get_stream_filter(stream)
-        self.sub_sock.setsockopt_string(zmq.UNSUBSCRIBE, stream_filter)
+        self.queue.put({
+            'action'        : 'UNSUBSCRIBE',
+            'stream_filter' : stream_filter
+        })

@@ -43,6 +43,13 @@ else:
 config = ConfigParser.ConfigParser()
 config.read(configfile)
 
+# define a custom function to pass to the poller loop
+# MUST BE DEFINED BEFORE SUBSCRIBER INSTANTIATION
+def thermistor_print(stream_id, data, log):
+    # convert temp from mC to C
+    TempC = float(data['c0']) * 1.0E-3
+    log.info("[{}]: {} C".format(stream_id, TempC))
+
 sub = Subscriber(config, logger)
 
 logger.info("streams")
@@ -58,6 +65,7 @@ if not stream in sub.known_streams:
 
 print("subscribing to stream: %s" % (stream,) )
 sub.subscribe(stream)
+sub.subscribe(stream, callback=thermistor_print)
 
 try:
     while True:
