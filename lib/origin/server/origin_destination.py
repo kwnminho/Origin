@@ -312,7 +312,15 @@ class Destination(object):
             result_text: message to return to client
             measurements: processed data, empty dict if error
         """
-        dtuple = struct.unpack_from(self.known_streams[stream]["format_str"], measurements)
+       fmtstr =  self.known_streams[stream]["format_str"]
+        try:
+            dtuple = struct.unpack_from(fmtstr, measurements)
+        except:
+            msg = 'Error unpacking stream data.'
+            msg2 = msg + ' stream: `{}` format_str: `{}`'
+            msg2 += ' measurements bytes: `{}`'
+            self.logger.error(msg2)
+            return (1, msg, {})
         meas = list(dtuple[1:])
         time_stamp = dtuple[0]
         return self.measurement_ordered(stream, time_stamp, meas)
