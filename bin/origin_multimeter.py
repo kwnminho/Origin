@@ -39,7 +39,7 @@ config.read(configfile)
 def init_meter(com_port):
     global meter
     print('meter, starting open:')
-    meter = serial.Serial(com_port, 9600, timeout=.1)
+    meter = serial.Serial(com_port, 9600, timeout=.5)
     time.sleep(1)
     print('meter,  done open')
     print(meter)
@@ -77,9 +77,10 @@ def read_meter(second='no'):
         meter.write("FETC? @2\n")
 
     #time.sleep(0.05)
-    responsestr = meter.read(100)
+    responsestr = meter.read(20)
     #print ('>' + responsestr + '<', len(responsestr))
 #    try:
+    #print responsestr
     response = float(responsestr)
     return response
 
