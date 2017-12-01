@@ -95,21 +95,25 @@ class HDF5Destination(Destination):
         template = stream_obj['definition']
         for field in template:
             dtype = data_types[template[field.strip()]['type']]['numpy']
-            stream_ver.create_dataset(
-                field
-                , chunksize
-                , maxshape=(None,)
-                , dtype=dtype
-                , chunks=chunksize
-                , compression=compression
-            )
-            stream_ver.create_dataset(
-                field + "_buffer"
-                , buff_size
-                , maxshape=buff_size
-                , dtype=dtype
-                , chunks=chunksize
-            )
+            try:
+                stream_ver.create_dataset(
+                    field
+                    , chunksize
+                    , maxshape=(None,)
+                    , dtype=dtype
+                    , chunks=chunksize
+                    , compression=compression
+                )
+                stream_ver.create_dataset(
+                    field + "_buffer"
+                    , buff_size
+                    , maxshape=buff_size
+                    , dtype=dtype
+                    , chunks=chunksize
+                )
+            except RuntimeError:
+                self.logger.exception("Server error occured.")
+                return -1
 
         self.hdf5_file.attrs['knownStreams'] = json.dumps(self.known_streams)
         stream_ver.attrs['definition'] = json.dumps(self.known_stream_versions[stream])
@@ -147,7 +151,7 @@ class HDF5Destination(Destination):
             dgroup[field+"_buffer"][row_count_buffer] = measurements[field]
         self.hdf5_file.flush()
 
-    def get_raw_stream_data(self, stream, start=None, stop=None, definition=None):
+    def get_raw_stream_data(self, stream, start=None, stop=None, fields=[]):
         '''read stream data from storage between the timestamps given by time = [start,stop]
         only takes timestamps in second
         '''
@@ -160,8 +164,8 @@ class HDF5Destination(Destination):
             msg = "Requested stream `{}` does not exist.".format(stream)
             return (1, {}, msg)
 
-        if definition is None:
-            definition = self.known_stream_versions[stream]
+        if fields == []:
+             fields = self.known_stream_versions[stream].keys()
 
         # read ring buffers and pointers in case the pointer advances during read
         raw_data = {}
@@ -176,7 +180,7 @@ class HDF5Destination(Destination):
             return (1, {}, msg)
 
         try:
-            for field in definition:
+            for field in fields:
                 raw_data[field] = {
                     'pointer': stream_group.attrs['row_count_buffer'], # pointer in ring buffer
                     'array':  stream_group[field + '_buffer']
@@ -199,7 +203,7 @@ class HDF5Destination(Destination):
         if buff_start > start: # if not go look for it
             # data after pointer has already been saved to the archive
             raw_data[TIMESTAMP] = array[:pointer]
-            for field in definition:
+            for field in fields:
                 raw_data[field] = raw_data[field]['array'][:pointer]
 
             raw_data = self.get_archived_stream_data(
@@ -207,12 +211,12 @@ class HDF5Destination(Destination):
                 start,
                 stop,
                 raw_data,
-                definition
+                fields
             )
 
         else:   # otherwise all requested data is contained in the buffer
             raw_data[TIMESTAMP] = np.concatenate((array[pointer:], array[:pointer]))
-            for field in definition:
+            for field in fields:
                 field_pointer = raw_data[field]['pointer']+1
                 offset = field_pointer - pointer
                 array = raw_data[field]['array']
@@ -247,12 +251,12 @@ class HDF5Destination(Destination):
         # json method cant handle numpy array
         data[TIMESTAMP] = raw_data[TIMESTAMP][idx_start:idx_stop].tolist()
 
-        for field in definition:
+        for field in fields:
             # json method cant handle numpy array
             data[field] = raw_data[field][idx_start:idx_stop].tolist()
         return (0, data, '')
 
-    def get_archived_stream_data(self, stream_group, start, stop, buffer_data, definition):
+    def get_archived_stream_data(self, stream_group, start, stop, buffer_data, fields):
         '''get raw_data in range from the archived data'''
         time_dset = stream_group[TIMESTAMP]
         row_pointer = stream_group.attrs['row_count']
@@ -263,7 +267,7 @@ class HDF5Destination(Destination):
         old_data = {}
         # make as big as it needs to be then resize
         old_data[TIMESTAMP] = np.zeros(row_pointer)
-        for field in definition:
+        for field in fields:
             old_data[field] = np.zeros(row_pointer)
         chunksize = self.config.getint('HDF5', 'chunksize')
         row_pointer -= chunksize
@@ -274,11 +278,11 @@ class HDF5Destination(Destination):
             pnt = row_pointer
             if chunk[0] < stop:
                 old_data[TIMESTAMP][pnt:pnt+chunksize] = chunk
-                for field in definition:
+                for field in fields:
                     old_data[field][pnt:pnt+chunksize] = stream_group[field][pnt:pnt+chunksize]
             if chunk[0] < start:
                 old_data[TIMESTAMP] = np.concatenate((old_data[TIMESTAMP][pnt:], buffer_data[TIMESTAMP]))
-                for field in definition:
+                for field in fields:
                     old_data[field] = np.concatenate((old_data[field][pnt:], buffer_data[field]))
                 break
             row_pointer -= chunksize

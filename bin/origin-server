@@ -267,21 +267,28 @@ class MonServer(object):
         stop = None
 
       try:
-        if 'field' in request_obj:
-          field = request_obj['field'].strip()
-          self.logger.debug("Read request for stream `{}.{}` recieved.".format(stream,field))
-          if ('raw' in request_obj) and request_obj['raw']:
-            self.logger.debug("Raw data requested.")
-            result, data, resultText = self.dest.get_raw_stream_field_data(stream,field,start,stop)
-          else:
-            result, data, resultText = self.dest.get_stat_stream_field_data(stream,field,start,stop)
+        if 'fields' in request_obj:
+          # expecting a list of fields
+          fields = [ f.strip() for f in request_obj['fields'] ]
         else:
-          self.logger.debug("Read request for stream `{}` recieved.".format(stream))
-          if ('raw' in request_obj) and request_obj['raw']:
-            self.logger.debug("Raw data requested.")
-            result, data, resultText = self.dest.get_raw_stream_data(stream,start,stop)
-          else:
-            result, data, resultText = self.dest.get_stat_stream_data(stream,start,stop)
+          # get all fields
+          fields = []
+        self.logger.debug("Read request for stream `{}.{}` recieved.".format(stream,fields))
+        if ('raw' in request_obj) and request_obj['raw']:
+          self.logger.debug("Raw data requested.")
+          result, data, resultText = self.dest.get_raw_stream_data(
+                stream,
+                fields=fields,
+                start=start,
+                stop=stop
+          )
+        else:
+          result, data, resultText = self.dest.get_stat_stream_data(
+                stream,
+                fields=fields,
+                start=start,
+                stop=stop
+          )
 
       except Exception:
         self.logger.exception("Unexpected exception in read message code:")
@@ -422,10 +429,7 @@ def main():
   logger.info("IOLoop Configured")
 
   # Start the event loop
-  try:
-      ioloop.IOLoop.instance().start()
-  except KeyboardInterrupt:
-      context.destroy()
+  ioloop.IOLoop.instance().start()
 
 if __name__ == "__main__":
   main()
